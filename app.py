@@ -63,7 +63,8 @@ def walk_forward_backtest(close, volume, horizon, max_predictions):
     x = features(close, volume)
     future_return = close.shift(-horizon) / close - 1
     # A target is usable only after its full future horizon has elapsed.
-    target = (future_return > 0).astype(int)
+    # Keep unresolved forward outcomes as missing; never label the final horizon bars as DOWN.
+    target = (future_return > 0).where(future_return.notna(), np.nan)
     frame = x.copy()
     frame["target"] = target
     frame = frame.replace([np.inf, -np.inf], np.nan).dropna()
