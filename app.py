@@ -52,6 +52,67 @@ def download_minutes(symbol):
     return aligned
 
 
+
+def indicator_snapshot(bars):
+    close = bars["close"].astype(float)
+    volume = bars["volume"].astype(float)
+    if len(close) < 60:
+        raise ValueError("At least 60 one-minute bars are required to calculate indicators.")
+    ema9 = close.ewm(span=9, adjust=False).mean()
+    sma20 = close.rolling(20).mean()
+    sma50 = close.rolling(50).mean()
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9, adjust=False).mean()
+    std20 = close.rolling(20).std(ddof=0)
+    upper = sma20 + 2 * std20
+    lower = sma20 - 2 * std20
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - 100 / (1 + rs)
+    rsi = rsi.where(loss != 0, 100).where(~((gain == 0) & (loss == 0)), 50)
+    vol_avg = volume.rolling(20).mean()
+    latest = float(close.iloc[-1])
+
+    def value(series):
+        result = series.iloc[-1]
+        return round(float(result), 4) if pd.notna(result) and np.isfinite(result) else None
+
+    rsi_value = value(rsi)
+    macd_value = value(macd)
+    signal_value = value(macd_signal)
+    if rsi_value is None:
+        rsi_read = "Unavailable"
+    elif rsi_value >= 70:
+        rsi_read = "Potentially overbought"
+    elif rsi_value <= 30:
+        rsi_read = "Potentially oversold"
+    else:
+        rsi_read = "Middle range"
+    return {
+        "symbol": str(bars.attrs.get("symbol", "")),
+        "last_price": round(latest, 4),
+        "data_time": close.index[-1].isoformat(),
+        "indicators": {
+            "rsi_14": {"value": rsi_value, "interpretation": rsi_read},
+            "macd": {"value": macd_value, "signal": signal_value,
+                     "interpretation": ("Bullish momentum crossover" if macd_value is not None and signal_value is not None and macd_value > signal_value else "Bearish momentum crossover" if macd_value is not None and signal_value is not None and macd_value < signal_value else "Unavailable")},
+            "sma_20": {"value": value(sma20), "position": "price above" if latest > float(sma20.iloc[-1]) else "price below"},
+            "sma_50": {"value": value(sma50), "position": "price above" if latest > float(sma50.iloc[-1]) else "price below"},
+            "ema_9": {"value": value(ema9)},
+            "bollinger_upper": {"value": value(upper)},
+            "bollinger_middle": {"value": value(sma20)},
+            "bollinger_lower": {"value": value(lower)},
+            "volume_vs_20_bar_avg_pct": round((float(volume.iloc[-1]) / float(vol_avg.iloc[-1]) - 1) * 100, 1) if pd.notna(vol_avg.iloc[-1]) and vol_avg.iloc[-1] > 0 else None
+        },
+        "method": "Indicators calculated from the latest available one-minute close and volume bars. SMA/EMA and Bollinger Bands are descriptive technical measures, not predictions.",
+        "notice": "Indicators can lag, give conflicting signals, and behave differently across timeframes. They are not trading advice."
+    }
+
+
 def make_model():
     return make_pipeline(
         StandardScaler(),
@@ -200,6 +261,20 @@ def predict(symbol: str = Query("SPY", min_length=1, max_length=12),
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc) or "Market data could not be loaded.") from exc
+
+
+
+@app.get("/api/indicators")
+def get_indicators(symbol: str = Query("SPY", min_length=1, max_length=12)):
+    symbol = symbol.strip().upper()
+    try:
+        bars = download_minutes(symbol)
+        bars.attrs["symbol"] = symbol
+        return indicator_snapshot(bars)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc) or "Indicators could not be calculated.") from exc
 
 
 @app.get("/api/backtest")
