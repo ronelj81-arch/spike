@@ -72,6 +72,9 @@ def walk_forward_backtest(close, volume, horizon, max_predictions):
     frame = x.copy()
     frame["target"] = target
     frame = frame.replace([np.inf, -np.inf], np.nan).dropna()
+    # pandas can preserve boolean labels as object when missing labels were masked.
+    # Convert the cleaned target to numeric 0/1 for current scikit-learn versions.
+    frame["target"] = frame["target"].astype("int8")
     if len(frame) < 220:
         raise ValueError("Not enough clean feature rows after indicator warm-up.")
 
@@ -170,6 +173,7 @@ def predict(symbol: str = Query("SPY", min_length=1, max_length=12),
         train = x.copy()
         train["target"] = (future_return > 0).where(future_return.notna() & valid_horizon, np.nan)
         train = train.dropna()
+        train["target"] = train["target"].astype("int8")
         current_x = x.dropna().iloc[[-1]]
         if len(train) < 100 or current_x.empty or train["target"].nunique() < 2:
             raise ValueError("Not enough usable intraday history to form a signal. Try again later.")
