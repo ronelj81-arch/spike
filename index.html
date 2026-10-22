@@ -54,7 +54,7 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
 <div class="controls">
 <div class="field"><label for="symbol">STOCK / ETF TICKER</label><input id="symbol" value="SPY" maxlength="12" placeholder="SPY, AAPL, QQQ" autocomplete="off"></div>
 <div class="field"><label for="horizon">FORECAST WINDOW</label><select id="horizon"><option value="5">Next 5 minutes</option><option value="10">Next 10 minutes</option></select></div>
-<button id="run">Generate signal ↗</button>
+<button type="button" id="run" onclick="predict()">Generate signal ↗</button>
 </div>
 <div class="hint">Examples: SPY · QQQ · AAPL · MSFT · TSLA. Market data availability depends on the ticker and provider.</div>
 <div id="status" class="status" role="status">Ready when you are. Run a forecast to load the latest available data.</div>
@@ -77,7 +77,7 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
   <div class="eyebrow">Price action</div>
   <h2 class="bt-title">Buy / sell signal chart</h2>
   <p class="sub" style="margin-bottom:14px">Price history with EMA lines and rule-based BUY WATCH / SELL-EXIT WATCH markers.</p>
-  <div class="bt-actions"><button id="chartBtn">Load buy / sell chart</button><span class="hint">Select the ticker in the main box above · latest available minute bars</span></div>
+  <div class="bt-actions"><button type="button" id="chartBtn" onclick="loadChart()">Load buy / sell chart</button><span class="hint">Select the ticker in the main box above · latest available minute bars</span></div>
   <div id="chartStatus" class="status" role="status">Load chart to view technical markers.</div>
   <div id="chartOutput" class="hidden">
     <div class="bt-note" id="chartSummary"></div>
@@ -90,7 +90,7 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
   <div class="eyebrow">Market opportunities</div>
   <h2 class="bt-title">Top 20 bullish stocks &amp; ETFs</h2>
   <p class="sub" style="margin-bottom:14px">Automatically rank up to 20 strongest technical setups from a curated universe of liquid, widely traded stocks and broad-market ETFs. Scores are technical filters, not probabilities or guaranteed buy signals.</p>
-  <div class="bt-actions"><button id="scanBtn">Refresh top 20 ↗</button><span class="hint">Auto-scans on page load · uses latest available one-minute data · may take a minute</span></div>
+  <div class="bt-actions"><button type="button" id="scanBtn" onclick="runScanner()">Refresh top 20 ↗</button><span class="hint">Auto-scans on page load · uses latest available one-minute data · may take a minute</span></div>
   <div id="scanStatus" class="status" role="status">Loading the latest market shortlist…</div>
   <div id="scanOutput" class="hidden">
     <div class="bt-note" id="scanSummary"></div>
@@ -103,7 +103,7 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
   <div class="eyebrow">Technical analysis</div>
   <h2 class="bt-title">Stock indicators</h2>
   <p class="sub" style="margin-bottom:14px">Check momentum, trend, volatility bands, and relative volume for the selected ticker using recent one-minute bars.</p>
-  <div class="bt-actions"><button id="indicatorsBtn">Load stock indicators</button><span class="hint">Uses the ticker above · indicators update when requested</span></div>
+  <div class="bt-actions"><button type="button" id="indicatorsBtn" onclick="loadIndicators()">Load stock indicators</button><span class="hint">Uses the ticker above · indicators update when requested</span></div>
   <div id="indStatus" class="status" role="status">No indicator data loaded yet.</div>
   <div id="indOutput" class="hidden">
     <div class="meta">
@@ -125,7 +125,7 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
   <div class="eyebrow">Historical validation</div>
   <h2 class="bt-title">Backtest your strategy</h2>
   <p class="sub" style="margin-bottom:14px">Run an expanding-window walk-forward test on recent one-minute bars. Each prediction is trained only on past data available at that point.</p>
-  <div class="bt-actions"><button id="backtest">Run 5 &amp; 10 min backtest</button><span class="hint">Uses the ticker above · usually takes a little longer</span></div>
+  <div class="bt-actions"><button type="button" id="backtest" onclick="runBacktest()">Run 5 &amp; 10 min backtest</button><span class="hint">Uses the ticker above · usually takes a little longer</span></div>
   <div id="btStatus" class="status" role="status">No backtest run yet.</div>
   <div id="btOutput" class="hidden">
     <div class="bt-grid">
@@ -143,7 +143,9 @@ const $=id=>document.getElementById(id);
 const money=n=>Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4});
 const fmtValue=v=>v===null||v===undefined||!Number.isFinite(Number(v))?'Unavailable':Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4});
 const validSymbol=s=>/^[A-Z0-9.^=-]{1,12}$/.test(s);
-function showStatus(id,message,isError=false){$(id).textContent=message;$(id).className='status'+(isError?' error':'');}
+function showStatus(id,message,isError=false){const el=$(id);if(!el)return;el.textContent=message;el.className='status'+(isError?' error':'');}
+window.addEventListener('error',event=>{console.error('Spike dashboard error:',event.message);const status=$('status');if(status){status.textContent='Dashboard script error: '+event.message;status.className='status error';}});
+window.addEventListener('unhandledrejection',event=>{console.error('Spike dashboard request error:',event.reason);const status=$('status');if(status&&event.reason){status.textContent='Dashboard error: '+(event.reason.message||String(event.reason));status.className='status error';}});
 async function predict(){
  const symbol=$('symbol').value.trim().toUpperCase();
  if(!validSymbol(symbol)){showStatus('status','Enter a valid ticker symbol.',true);return;}
@@ -230,11 +232,6 @@ async function runBacktest(){
  }catch(e){showStatus('btStatus',e.message+' Try again later or another ticker.',true);}
  finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
 }
-$('scanBtn').addEventListener('click',runScanner);
-$('indicatorsBtn').addEventListener('click',loadIndicators);
-$('chartBtn').addEventListener('click',loadChart);
-$('backtest').addEventListener('click',runBacktest);
-$('run').addEventListener('click',predict);
 $('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
 window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
 runScanner();
