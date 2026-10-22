@@ -341,6 +341,54 @@ def bullish_scanner(symbols: str = Query("SPY,QQQ,AAPL,MSFT,NVDA,AMD,META,TSLA,A
         "notice": "A score of 100 means all six configured bullish checks passed on the latest available one-minute bar. It does not mean a 100% chance of rising. Short-term indicators can fail and data may be delayed."
     }
 
+
+@app.get("/api/chart")
+def chart_data(symbol: str = Query("SPY", min_length=1, max_length=12),
+               limit: int = Query(120, ge=40, le=300)):
+    symbol = symbol.strip().upper()
+    try:
+        bars = download_minutes(symbol).tail(limit).copy()
+        close = bars["close"].astype(float)
+        ema9 = close.ewm(span=9, adjust=False).mean()
+        ema20 = close.ewm(span=20, adjust=False).mean()
+        sma50 = close.rolling(50).mean()
+        delta = close.diff()
+        gain = delta.clip(lower=0).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+        loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+        rs = gain / loss.replace(0, np.nan)
+        rsi = (100 - 100 / (1 + rs)).where(loss != 0, 100).where(~((gain == 0) & (loss == 0)), 50)
+        rows = []
+        prior_bull = False
+        for i, (ts, price) in enumerate(close.items()):
+            e9, e20 = float(ema9.iloc[i]), float(ema20.iloc[i])
+            s50 = float(sma50.iloc[i]) if pd.notna(sma50.iloc[i]) else None
+            current_bull = e9 > e20
+            previous_bull = bool(ema9.iloc[i-1] > ema20.iloc[i-1]) if i else current_bull
+            signal = None
+            # Mark only crossover bars with trend/RSI confirmation.
+            rsi_i = float(rsi.iloc[i]) if pd.notna(rsi.iloc[i]) else None
+            if i and current_bull and not previous_bull and (s50 is None or price > s50) and (rsi_i is None or 50 <= rsi_i < 70):
+                signal = "BUY WATCH"
+            elif i and not current_bull and previous_bull:
+                signal = "SELL / EXIT WATCH"
+            rows.append({
+                "time": ts.isoformat(), "price": round(float(price), 4),
+                "ema9": round(e9, 4), "ema20": round(e20, 4),
+                "sma50": round(s50, 4) if s50 is not None else None,
+                "rsi14": round(rsi_i, 2) if rsi_i is not None else None,
+                "signal": signal
+            })
+        return {
+            "symbol": symbol, "bars": rows,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "method": "Illustrative technical markers: BUY WATCH on EMA 9 crossing above EMA 20 with trend/RSI checks; SELL / EXIT WATCH on EMA 9 crossing below EMA 20.",
+            "notice": "Markers are retrospective technical rule triggers, not personalized financial advice or guaranteed entry/exit prices. Confirm live data, spreads, liquidity, and risk. No stop-loss or position size is implied."
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc) or "Chart data could not be loaded.") from exc
+
 @app.get("/api/backtest")
 def backtest(symbol: str = Query("SPY", min_length=1, max_length=12),
              max_predictions: int = Query(80, ge=20, le=200)):
