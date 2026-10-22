@@ -214,6 +214,23 @@ async function predict(){
  }catch(e){showStatus('status',e.message+' Check the ticker and try again during market hours.',true);}
  finally{button.disabled=false;button.textContent='Generate signal ↗';}
 }
+function toggleSignalExplanation(row,item,scoreKey){
+ const next=row.nextElementSibling;
+ if(next&&next.dataset.signalExplanation==='true'){next.remove();return;}
+ document.querySelectorAll('tr[data-signal-explanation="true"]').forEach(el=>el.remove());
+ const detailRow=document.createElement('tr');detailRow.dataset.signalExplanation='true';
+ const cell=document.createElement('td');cell.colSpan=row.children.length;
+ cell.style.cssText='padding:14px 16px;background:var(--panel);border-bottom:1px solid var(--line);white-space:normal;';
+ const heading=document.createElement('div');heading.style.cssText='font-weight:800;margin-bottom:8px;color:'+(scoreKey==='bullish_score'?'var(--green)':'var(--red)');
+ heading.textContent=(scoreKey==='bullish_score'?'Why this looks bullish':'Why this looks bearish')+' · score '+item[scoreKey]+'/100';cell.appendChild(heading);
+ const intro=document.createElement('div');intro.style.cssText='margin-bottom:8px;color:var(--muted);font-size:13px;';
+ intro.textContent=scoreKey==='bullish_score'?'The scanner ranked this stock bullish because of its technical checks below. A higher score means more bullish checks aligned—not a guarantee the price will rise.':'The scanner ranked this stock bearish because of its technical checks below. A higher score means more bearish evidence—not a guarantee the price will fall.';cell.appendChild(intro);
+ const list=document.createElement('div');list.style.cssText='display:grid;gap:6px;font-size:13px;';
+ (item.checks||[]).forEach(check=>{const line=document.createElement('div');const marker=document.createElement('span');marker.style.fontWeight='800';marker.style.color=check.bullish?'var(--green)':'var(--muted)';marker.textContent=check.bullish?'✓ ':'○ ';const label=document.createElement('strong');label.textContent=check.name+': ';const explanation=document.createElement('span');explanation.textContent=check.detail;line.append(marker,label,explanation);list.appendChild(line);});
+ cell.appendChild(list);
+ const note=document.createElement('div');note.style.cssText='margin-top:10px;font-size:12px;color:var(--muted)';note.textContent='Educational context, not a standalone buy/sell recommendation. Check trend, liquidity, spreads, and the data timestamp; penny stocks can be especially volatile.';cell.appendChild(note);
+ detailRow.appendChild(cell);row.after(detailRow);
+}
 async function runVolumeScanner(){
  const button=$('volumeScanBtn');button.disabled=true;button.textContent='Scanning volume…';
  showStatus('volumeScanStatus','Checking latest available intraday volume across the watchlist…');$('volumeScanOutput').classList.add('hidden');
@@ -241,7 +258,7 @@ async function runScanner(){
    const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
    const vals=[String(index+1),item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
    vals.forEach((v,col)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(col===2){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(col===3)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\\n');rows.appendChild(tr);
+   tr.title='Tap to see why this setup scored bullish';tr.style.cursor='pointer';tr.addEventListener('click',()=>toggleSignalExplanation(tr,item,'bullish_score'));rows.appendChild(tr);
   });
   $('scanSummary').textContent='Showing '+data.results.length+' highest-scoring tickers from '+data.universe_scored+' successfully scored of '+data.universe_requested+' candidates · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
   $('scanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' ticker(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All candidates returned data.';
@@ -315,7 +332,7 @@ async function runPennyScanner(){
     const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
     const values=[item.symbol,String(item[scoreKey])+'/100','$'+Number(item.last_price).toFixed(3),(item.change_5bar_pct>0?'+':'')+Number(item.change_5bar_pct).toFixed(2)+'%',Number(item.rsi_14).toFixed(1)];
     values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;td.style.padding='10px 9px';if(index===1){td.style.fontWeight='800';td.style.color=scoreKey==='bullish_score'?'var(--green)':'var(--red)';}tr.appendChild(td);});
-    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join(' | ');tr.style.cursor='help';tbody.appendChild(tr);
+     tr.title='Tap to see why this stock scored '+(scoreKey==='bullish_score'?'bullish':'bearish');tr.style.cursor='pointer';tr.addEventListener('click',()=>toggleSignalExplanation(tr,item,scoreKey));tbody.appendChild(tr);
    });
    $(emptyId).textContent=items.length?'Hover a row to see technical checks.':'No matching signals in the current scan.';
   };
