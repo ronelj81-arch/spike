@@ -619,6 +619,58 @@ def chart_data(symbol: str = Query("SPY", min_length=1, max_length=12),
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc) or "Chart data could not be loaded.") from exc
 
+
+@app.get("/api/market-movers")
+def live_market_movers():
+    """Latest available intraday movement for a broad, curated US stock watchlist."""
+    symbols = ["SPY", "QQQ", "DIA", "IWM", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL", "AMD", "NFLX", "PLTR", "COIN", "SMCI"]
+    try:
+        data = yf.download(symbols, period="1d", interval="5m", progress=False,
+                           auto_adjust=False, group_by="ticker", threads=True)
+        movers = []
+        for symbol in symbols:
+            try:
+                frame = data[symbol] if isinstance(data.columns, pd.MultiIndex) else data
+                if frame is None or frame.empty or "Close" not in frame:
+                    continue
+                close = frame["Close"].dropna()
+                if len(close) < 1:
+                    continue
+                latest = float(close.iloc[-1])
+                previous = float(close.iloc[-2]) if len(close) > 1 else latest
+                if not np.isfinite(latest) or latest <= 0:
+                    continue
+                # Prefer previous regular-session close for day change when available.
+                day_change = None
+                try:
+                    daily = yf.download(symbol, period="5d", interval="1d", progress=False,
+                                        auto_adjust=False, threads=False)
+                    if isinstance(daily.columns, pd.MultiIndex):
+                        daily.columns = daily.columns.get_level_values(0)
+                    dc = daily["Close"].dropna() if "Close" in daily.columns else pd.Series(dtype=float)
+                    if len(dc) >= 2:
+                        day_change = (latest / float(dc.iloc[-2]) - 1) * 100
+                except Exception:
+                    pass
+                movers.append({
+                    "symbol": symbol, "price": round(latest, 4),
+                    "bar_change_pct": round((latest / previous - 1) * 100, 3) if previous else 0,
+                    "day_change_pct": round(day_change, 3) if day_change is not None else None,
+                    "timestamp": close.index[-1].isoformat()
+                })
+            except Exception:
+                continue
+        if not movers:
+            raise ValueError("No intraday quotes were returned by the market-data provider.")
+        movers.sort(key=lambda item: abs(item["day_change_pct"] if item["day_change_pct"] is not None else item["bar_change_pct"]), reverse=True)
+        return {
+            "movers": movers, "generated_at": datetime.now(timezone.utc).isoformat(),
+            "refresh_seconds": 60,
+            "notice": "Latest available 5-minute bars from Yahoo Finance; quotes may be delayed and can be stale outside market hours. Not an exchange-direct real-time feed."
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc) or "Live market movement could not be loaded.") from exc
+
 @app.get("/api/history")
 def stock_price_history(symbol: str = Query("AAPL", min_length=1, max_length=12),
                         period: str = Query("5y", pattern="^(1mo|6mo|1y|5y)$")):
