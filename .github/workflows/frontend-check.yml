@@ -25,12 +25,12 @@ jobs:
           import re
           from pathlib import Path
           html = Path("index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script\\s*>", html, re.I | re.S)
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script\s*>", html, re.I | re.S)
           if len(scripts) != 1:
               raise SystemExit(f"Expected exactly one inline script, found {len(scripts)}")
           Path("/tmp/dashboard.js").write_text(scripts[0], encoding="utf-8")
-          ids = set(re.findall(r'\\bid="([^"]+)"', html))
-          refs = set(re.findall(r"\\$\\('([^']+)'\\)", scripts[0]))
+          ids = set(re.findall(r'\bid="([^"]+)"', html))
+          refs = set(re.findall(r"\$\('([^']+)'\)", scripts[0]))
           missing = sorted(refs - ids)
           if missing:
               raise SystemExit(f"JavaScript references missing element IDs: {missing}")
