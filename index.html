@@ -88,16 +88,15 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
 </section>
 <section class="panel bt-panel" id="scannerPanel">
   <div class="eyebrow">Market opportunities</div>
-  <h2 class="bt-title">Bullish stock scanner</h2>
-  <p class="sub" style="margin-bottom:14px">Rank a watchlist by technical trend, momentum, and volume confirmation. Scores are not probabilities or guarantees.</p>
-  <div class="field"><label for="scannerSymbols">WATCHLIST TICKERS (UP TO 12)</label><input id="scannerSymbols" value="SPY,QQQ,AAPL,MSFT,NVDA,AMD,META,TSLA,AMZN" maxlength="300" autocomplete="off"></div>
-  <div class="bt-actions"><button id="scanBtn">Scan for bullish setups ↗</button><span class="hint">Uses latest available one-minute data · can take a minute</span></div>
-  <div id="scanStatus" class="status" role="status">Run a scan to rank your watchlist.</div>
+  <h2 class="bt-title">Top 20 bullish stocks &amp; ETFs</h2>
+  <p class="sub" style="margin-bottom:14px">Automatically rank up to 20 strongest technical setups from a curated universe of liquid, widely traded stocks and broad-market ETFs. Scores are technical filters, not probabilities or guaranteed buy signals.</p>
+  <div class="bt-actions"><button id="scanBtn">Refresh top 20 ↗</button><span class="hint">Auto-scans on page load · uses latest available one-minute data · may take a minute</span></div>
+  <div id="scanStatus" class="status" role="status">Loading the latest market shortlist…</div>
   <div id="scanOutput" class="hidden">
     <div class="bt-note" id="scanSummary"></div>
-    <div style="overflow-x:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;min-width:650px;font-size:13px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:12px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:12px;border-bottom:1px solid var(--line)">Bullish score</th><th style="padding:12px;border-bottom:1px solid var(--line)">Setup</th><th style="padding:12px;border-bottom:1px solid var(--line)">Last price</th><th style="padding:12px;border-bottom:1px solid var(--line)">1m change</th><th style="padding:12px;border-bottom:1px solid var(--line)">RSI</th><th style="padding:12px;border-bottom:1px solid var(--line)">Vol. × avg</th></tr></thead><tbody id="scanRows"></tbody></table></div>
+    <div style="overflow-x:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;min-width:650px;font-size:13px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:12px;border-bottom:1px solid var(--line)">Rank</th><th style="padding:12px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:12px;border-bottom:1px solid var(--line)">Bullish score</th><th style="padding:12px;border-bottom:1px solid var(--line)">Setup</th><th style="padding:12px;border-bottom:1px solid var(--line)">Last price</th><th style="padding:12px;border-bottom:1px solid var(--line)">1m change</th><th style="padding:12px;border-bottom:1px solid var(--line)">RSI</th><th style="padding:12px;border-bottom:1px solid var(--line)">Vol. × avg</th></tr></thead><tbody id="scanRows"></tbody></table></div>
     <div class="bt-note" id="scanErrors"></div>
-    <div class="bt-note">A score of 100 means every configured technical check passed on the latest available bar. It does <strong>not</strong> mean a 100% chance of rising. Technical signals can fail; confirm timestamps and risk before acting.</div>
+    <div class="bt-note">Ranked candidates are not automatic buy recommendations. The universe is curated, not the entire stock market; if fewer than 20 symbols return usable data, fewer rows will appear. A score of 100 is not a 100% chance of rising.</div>
   </div>
 </section>
 <section class="panel bt-panel">
@@ -164,23 +163,21 @@ async function predict(){
  finally{button.disabled=false;button.textContent='Generate signal ↗';}
 }
 async function runScanner(){
- const symbols=$('scannerSymbols').value.trim().toUpperCase();
- if(!symbols){showStatus('scanStatus','Enter at least one ticker.',true);return;}
- const button=$('scanBtn');button.disabled=true;button.textContent='Scanning watchlist…';showStatus('scanStatus','Checking ticker data and scoring technical conditions…');$('scanOutput').classList.add('hidden');
+ const button=$('scanBtn');button.disabled=true;button.textContent='Scanning market…';showStatus('scanStatus','Scoring the curated market universe and ranking the strongest available setups…');$('scanOutput').classList.add('hidden');
  try{
-  const res=await fetch('/api/scanner?symbols='+encodeURIComponent(symbols));const data=await res.json();if(!res.ok)throw new Error(data.detail||'Scanner failed.');
+  const res=await fetch('/api/scanner');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Market scanner failed.');
   const rows=$('scanRows');rows.replaceChildren();
-  for(const item of data.results){
+  data.results.forEach((item,index)=>{
    const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-   const vals=[item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
-   vals.forEach((v,index)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(index===1){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(index===2)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\n');rows.appendChild(tr);
-  }
-  $('scanSummary').textContent='Scanned '+data.results.length+' ticker(s) · ranked by technical score · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for checks.';
-  $('scanErrors').textContent=data.errors.length?'Unavailable: '+data.errors.map(e=>e.symbol+' ('+e.error+')').join(' · '):'All requested tickers returned data.';
-  $('scanOutput').classList.remove('hidden');showStatus('scanStatus','Scan complete. Results are ranked by bullish technical score.');
+   const vals=[String(index+1),item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
+   vals.forEach((v,col)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(col===2){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(col===3)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
+   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\\n');rows.appendChild(tr);
+  });
+  $('scanSummary').textContent='Showing '+data.results.length+' highest-scoring tickers from '+data.universe_scored+' successfully scored of '+data.universe_requested+' candidates · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
+  $('scanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' ticker(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All candidates returned data.';
+  $('scanOutput').classList.remove('hidden');showStatus('scanStatus','Market scan complete. The list is ranked by technical score, not buy certainty.');
  }catch(e){showStatus('scanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Scan for bullish setups ↗';}
+ finally{button.disabled=false;button.textContent='Refresh top 20 ↗';}
 }
 async function loadIndicators(){
  const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('indStatus','Enter a valid ticker symbol first.',true);return;}
@@ -240,61 +237,5 @@ $('backtest').addEventListener('click',runBacktest);
 $('run').addEventListener('click',predict);
 $('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
 window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
-</body></html>+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
-   vals.forEach((v,index)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(index===1){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(index===2)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\n');rows.appendChild(tr);
-  }
-  $('scanSummary').textContent='Scanned '+data.results.length+' ticker(s) · '+(data.results.length?'Ranked by technical score':'No tickers returned')+' · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
-  $('scanErrors').textContent=data.errors.length?'Unavailable: '+data.errors.map(e=>e.symbol+' ('+e.error+')').join(' · '):'All requested tickers returned data.';
-  $('scanOutput').classList.remove('hidden');
-  showStatus('scanStatus','Scan complete. Results are ranked by bullish technical score.');
- }catch(e){showStatus('scanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Scan for bullish setups ↗';}
-}
-async function loadIndicators(){
- const symbol=$('symbol').value.trim().toUpperCase();
- if(!validSymbol(symbol)){showStatus('indStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('indicatorsBtn');button.disabled=true;button.textContent='Calculating…';showStatus('indStatus','Loading recent bars and calculating technical indicators…');$('indOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/indicators?symbol='+encodeURIComponent(symbol));const data=await res.json();
-  if(!res.ok)throw new Error(data.detail||'Unable to load indicators.');
-  const i=data.indicators;
-  $('indRsi').textContent=fmtValue(i.rsi_14.value);$('indRsiNote').textContent=i.rsi_14.interpretation;
-  $('indMacd').textContent=fmtValue(i.macd.value)+' / '+fmtValue(i.macd.signal);$('indMacdNote').textContent=i.macd.interpretation;
-  $('indSma20').textContent=fmtValue(i.sma_20.value);$('indSma20Note').textContent=i.sma_20.position;
-  $('indSma50').textContent=fmtValue(i.sma_50.value);$('indSma50Note').textContent=i.sma_50.position;
-  $('indEma9').textContent=fmtValue(i.ema_9.value);
-  $('indBollUp').textContent=fmtValue(i.bollinger_upper.value);$('indBollMid').textContent=fmtValue(i.bollinger_middle.value);$('indBollLow').textContent=fmtValue(i.bollinger_lower.value);
-  $('indVolume').textContent=i.volume_vs_20_bar_avg_pct===null?'Unavailable':(i.volume_vs_20_bar_avg_pct>0?'+':'')+i.volume_vs_20_bar_avg_pct.toFixed(1)+'%';
-  $('indOutput').classList.remove('hidden');
-  $('indDetails').textContent='Ticker '+data.symbol+' · Last price $'+fmtValue(data.last_price)+' · Latest bar '+String(data.data_time).replace('T',' ').slice(0,19)+'. '+data.method+' '+data.notice;
-  showStatus('indStatus','Indicators loaded for '+data.symbol+'. Check the timestamp and data freshness.');
- }catch(e){showStatus('indStatus',e.message+' The provider may restrict minute history; try another ticker or try again later.',true);}
- finally{button.disabled=false;button.textContent='Load stock indicators';}
-}
-async function runBacktest(){
- const symbol=$('symbol').value.trim().toUpperCase();
- if(!validSymbol(symbol)){showStatus('btStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('backtest');button.disabled=true;button.textContent='Testing historical data…';showStatus('btStatus','Downloading minute bars and running chronological tests for both horizons…');$('btOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/backtest?symbol='+encodeURIComponent(symbol)+'&max_predictions=80');const data=await res.json();
-  if(!res.ok)throw new Error(data.detail||'Backtest failed.');
-  for(const item of data.results){
-   const p='bt'+item.horizon_minutes;
-   $(p+'acc').textContent=item.directional_accuracy_pct.toFixed(1)+'%';
-   $(p+'base').textContent=item.always_up_baseline_pct.toFixed(1)+'%';
-   $(p+'signal').textContent=item.signal_accuracy_pct===null?'No calls':item.signal_accuracy_pct.toFixed(1)+'%';
-   $(p+'coverage').textContent=item.signal_coverage_pct.toFixed(1)+'%';
-   $(p+'calls').textContent=item.up_calls+' / '+item.down_calls;
-  }
-  $('btOutput').classList.remove('hidden');
-  $('btDetails').textContent='Ticker '+data.symbol+' · '+data.data_bars.toLocaleString()+' minute bars downloaded · '+data.results.map(r=>r.horizon_minutes+'m: '+r.predictions_tested+' predictions').join(' · ')+'. Test window: '+data.results[0].first_test_time+' through '+data.results[0].last_test_time+'. '+data.notice;
-  showStatus('btStatus','Backtest completed for '+data.symbol+'. Results are displayed below.');
- }catch(e){showStatus('btStatus',e.message+' The provider may restrict minute history; try again later or another ticker.',true);}
- finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
-}
-$('indicatorsBtn').addEventListener('click',loadIndicators);
-$('backtest').addEventListener('click',runBacktest);
-$('run').addEventListener('click',predict);
-$('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
+runScanner();
 </script></body></html>
