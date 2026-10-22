@@ -61,10 +61,14 @@ def make_model():
 
 def walk_forward_backtest(close, volume, horizon, max_predictions):
     x = features(close, volume)
-    future_return = close.shift(-horizon) / close - 1
-    # A target is usable only after its full future horizon has elapsed.
-    # Keep unresolved forward outcomes as missing; never label the final horizon bars as DOWN.
-    target = (future_return > 0).where(future_return.notna(), np.nan)
+    future_close = close.shift(-horizon)
+    future_return = future_close / close - 1
+    # Exclude session gaps: a next-session open is not a 5/10-minute outcome.
+    timestamps = pd.Series(close.index, index=close.index)
+    future_time = timestamps.shift(-horizon)
+    elapsed_minutes = (future_time - timestamps).dt.total_seconds() / 60
+    valid_horizon = elapsed_minutes.between(horizon * 0.8, horizon * 1.5)
+    target = (future_return > 0).where(future_return.notna() & valid_horizon, np.nan)
     frame = x.copy()
     frame["target"] = target
     frame = frame.replace([np.inf, -np.inf], np.nan).dropna()
@@ -157,10 +161,15 @@ def predict(symbol: str = Query("SPY", min_length=1, max_length=12),
         bars = download_minutes(symbol)
         close, volume = bars["close"], bars["volume"]
         x = features(close, volume)
-        future_return = close.shift(-horizon) / close - 1
+        future_close = close.shift(-horizon)
+        future_return = future_close / close - 1
+        timestamps = pd.Series(close.index, index=close.index)
+        future_time = timestamps.shift(-horizon)
+        elapsed_minutes = (future_time - timestamps).dt.total_seconds() / 60
+        valid_horizon = elapsed_minutes.between(horizon * 0.8, horizon * 1.5)
         train = x.copy()
-        train["target"] = (future_return > 0).astype(int)
-        train = train.iloc[:-horizon].dropna()
+        train["target"] = (future_return > 0).where(future_return.notna() & valid_horizon, np.nan)
+        train = train.dropna()
         current_x = x.dropna().iloc[[-1]]
         if len(train) < 100 or current_x.empty or train["target"].nunique() < 2:
             raise ValueError("Not enough usable intraday history to form a signal. Try again later.")
