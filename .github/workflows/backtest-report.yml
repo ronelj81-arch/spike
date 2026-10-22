@@ -1,0 +1,45 @@
+name: Real-data backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: Ticker symbol
+        required: true
+        default: SPY
+      max_predictions:
+        description: Maximum held-out predictions per horizon
+        required: true
+        default: "80"
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "scripts/run_backtest.py"
+      - "requirements.txt"
+      - ".github/workflows/backtest-report.yml"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Run real-data backtest
+        env:
+          BACKTEST_SYMBOL: ${{ github.event.inputs.symbol || 'SPY' }}
+          BACKTEST_MAX_PREDICTIONS: ${{ github.event.inputs.max_predictions || '80' }}
+      - run: python scripts/run_backtest.py
+      - name: Save report artifact
+        if: always() && hashFiles('backtest-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-backtest-report
+          path: backtest-report.json
+          if-no-files-found: warn
+          retention-days: 14
