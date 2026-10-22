@@ -113,6 +113,49 @@ def indicator_snapshot(bars):
     }
 
 
+
+def bullish_snapshot(bars, symbol):
+    close = bars["close"].astype(float)
+    volume = bars["volume"].astype(float)
+    if len(close) < 60:
+        raise ValueError("Not enough bars to score this ticker.")
+    last = float(close.iloc[-1])
+    prev = float(close.iloc[-2])
+    sma20 = float(close.rolling(20).mean().iloc[-1])
+    sma50 = float(close.rolling(50).mean().iloc[-1])
+    ema9 = float(close.ewm(span=9, adjust=False).mean().iloc[-1])
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9, adjust=False).mean()
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = (100 - 100 / (1 + rs)).where(loss != 0, 100).where(~((gain == 0) & (loss == 0)), 50)
+    rsi_now = float(rsi.iloc[-1]) if pd.notna(rsi.iloc[-1]) else 50.0
+    avg_volume = float(volume.rolling(20).mean().iloc[-1])
+    vol_ratio = float(volume.iloc[-1] / avg_volume) if avg_volume > 0 else 0.0
+    points = 0
+    checks = []
+    def check(name, passed, weight, detail):
+        nonlocal points
+        if passed:
+            points += weight
+        checks.append({"name": name, "bullish": bool(passed), "detail": detail})
+    check("Price above SMA 20", last > sma20, 20, f"Last price {last:.2f}; SMA 20 {sma20:.2f}")
+    check("Price above SMA 50", last > sma50, 20, f"Last price {last:.2f}; SMA 50 {sma50:.2f}")
+    check("EMA 9 above SMA 20", ema9 > sma20, 15, f"EMA 9 {ema9:.2f}; SMA 20 {sma20:.2f}")
+    check("MACD above signal", float(macd.iloc[-1]) > float(macd_signal.iloc[-1]), 20, "MACD momentum is above its signal line" if float(macd.iloc[-1]) > float(macd_signal.iloc[-1]) else "MACD is not above its signal line")
+    check("RSI momentum", 50 <= rsi_now < 70, 15, f"RSI 14 is {rsi_now:.1f}; scanner rewards positive momentum without the >70 overbought zone")
+    check("Volume confirmation", vol_ratio >= 1.2 and last > prev, 10, f"Latest volume is {vol_ratio:.2f}× its 20-bar average; latest bar {'rose' if last > prev else 'did not rise'}")
+    label = "Strong bullish" if points >= 80 else "Bullish" if points >= 60 else "Mixed" if points >= 40 else "Weak / bearish"
+    return {
+        "symbol": symbol, "last_price": round(last, 4), "change_1m_pct": round((last / prev - 1) * 100, 3),
+        "bullish_score": points, "classification": label, "rsi_14": round(rsi_now, 2),
+        "volume_ratio": round(vol_ratio, 2), "data_time": close.index[-1].isoformat(), "checks": checks
+    }
+
 def make_model():
     return make_pipeline(
         StandardScaler(),
@@ -276,6 +319,27 @@ def get_indicators(symbol: str = Query("SPY", min_length=1, max_length=12)):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc) or "Indicators could not be calculated.") from exc
 
+
+
+@app.get("/api/scanner")
+def bullish_scanner(symbols: str = Query("SPY,QQQ,AAPL,MSFT,NVDA,AMD,META,TSLA,AMZN", max_length=300)):
+    requested = list(dict.fromkeys(s.strip().upper() for s in symbols.split(",") if s.strip()))
+    if not requested or len(requested) > 12 or any(not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested):
+        raise HTTPException(status_code=400, detail="Provide 1–12 valid comma-separated ticker symbols.")
+    results, errors = [], []
+    for symbol in requested:
+        try:
+            bars = download_minutes(symbol)
+            results.append(bullish_snapshot(bars, symbol))
+        except Exception as exc:
+            errors.append({"symbol": symbol, "error": str(exc) or "Data unavailable"})
+    results.sort(key=lambda item: (item["bullish_score"], item["change_1m_pct"]), reverse=True)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "method": "Rule-based technical score from six trend, momentum, and volume checks; not a probability or expected return.",
+        "results": results, "errors": errors,
+        "notice": "A score of 100 means all six configured bullish checks passed on the latest available one-minute bar. It does not mean a 100% chance of rising. Short-term indicators can fail and data may be delayed."
+    }
 
 @app.get("/api/backtest")
 def backtest(symbol: str = Query("SPY", min_length=1, max_length=12),
