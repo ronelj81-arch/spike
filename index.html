@@ -99,17 +99,11 @@ button:hover:not(:disabled){filter:brightness(1.07);transform:translateY(-1px)}
   <div id="pennyScanOutput" class="hidden">
     <div class="bt-note" id="pennyScanSummary"></div>
     <div class="bt-grid">
-      <div class="bt-card">
-        <h3 style="color:var(--green)">Bullish candidates</h3>
-        <div class="bt-note">Higher bullish technical score, not a guaranteed rise.</div>
-        <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;min-width:420px;font-size:12px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:9px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:9px;border-bottom:1px solid var(--line)">Score</th><th style="padding:9px;border-bottom:1px solid var(--line)">Price</th><th style="padding:9px;border-bottom:1px solid var(--line)">5-bar %</th><th style="padding:9px;border-bottom:1px solid var(--line)">RSI</th></tr></thead><tbody id="pennyBullRows"></tbody></table></div>
-        <div class="bt-note" id="pennyBullEmpty"></div>
+      <div class="bt-card"><h3 style="color:var(--green)">Bullish candidates</h3><div class="bt-note">Higher bullish technical score, not a guaranteed rise.</div>
+        <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;min-width:420px;font-size:12px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:9px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:9px;border-bottom:1px solid var(--line)">Score</th><th style="padding:9px;border-bottom:1px solid var(--line)">Price</th><th style="padding:9px;border-bottom:1px solid var(--line)">5-bar %</th><th style="padding:9px;border-bottom:1px solid var(--line)">RSI</th></tr></thead><tbody id="pennyBullRows"></tbody></table></div><div class="bt-note" id="pennyBullEmpty"></div>
       </div>
-      <div class="bt-card">
-        <h3 style="color:var(--red)">Bearish candidates</h3>
-        <div class="bt-note">Higher bearish technical score; shorting penny stocks carries substantial risk.</div>
-        <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;min-width:420px;font-size:12px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:9px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:9px;border-bottom:1px solid var(--line)">Score</th><th style="padding:9px;border-bottom:1px solid var(--line)">Price</th><th style="padding:9px;border-bottom:1px solid var(--line)">5-bar %</th><th style="padding:9px;border-bottom:1px solid var(--line)">RSI</th></tr></thead><tbody id="pennyBearRows"></tbody></table></div>
-        <div class="bt-note" id="pennyBearEmpty"></div>
+      <div class="bt-card"><h3 style="color:var(--red)">Bearish candidates</h3><div class="bt-note">Higher bearish technical score; shorting penny stocks carries substantial risk.</div>
+        <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;min-width:420px;font-size:12px"><thead><tr style="color:var(--muted);text-align:left"><th style="padding:9px;border-bottom:1px solid var(--line)">Ticker</th><th style="padding:9px;border-bottom:1px solid var(--line)">Score</th><th style="padding:9px;border-bottom:1px solid var(--line)">Price</th><th style="padding:9px;border-bottom:1px solid var(--line)">5-bar %</th><th style="padding:9px;border-bottom:1px solid var(--line)">RSI</th></tr></thead><tbody id="pennyBearRows"></tbody></table></div><div class="bt-note" id="pennyBearEmpty"></div>
       </div>
     </div>
     <div class="bt-note" id="pennyScanErrors"></div>
@@ -194,7 +188,6 @@ async function predict(){
  }catch(e){showStatus('status',e.message+' Check the ticker and try again during market hours.',true);}
  finally{button.disabled=false;button.textContent='Generate signal ↗';}
 }
-
 async function runPennyScanner(){
  const button=$('pennyScanBtn');button.disabled=true;button.textContent='Scanning…';
  showStatus('pennyScanStatus','Checking recent data, current prices, and bullish/bearish technical signals…');
@@ -281,7 +274,7 @@ runScanner();
 </script></body></html>
 +Number(item.last_price).toFixed(3),(item.change_5bar_pct>0?'+':'')+item.change_5bar_pct.toFixed(2)+'%',item.rsi_14.toFixed(1)];
     vals.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;td.style.padding='10px 9px';if(index===1){td.style.fontWeight='800';td.style.color=scoreKey==='bullish_score'?'var(--green)':'var(--red)';}tr.appendChild(td);});
-    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\n');
+    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join(' | ');
     tr.style.cursor='help';tbody.appendChild(tr);
    });
    $(emptyId).textContent=items.length?'Hover a row to see the technical checks.':'No matching signals in the current scan. Try a higher price limit or scan again during market hours.';
