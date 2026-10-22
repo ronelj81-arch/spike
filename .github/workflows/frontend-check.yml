@@ -1,0 +1,39 @@
+name: Frontend JavaScript Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - ".github/workflows/frontend-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Extract and syntax-check dashboard JavaScript
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script\\s*>", html, re.I | re.S)
+          if len(scripts) != 1:
+              raise SystemExit(f"Expected exactly one inline script, found {len(scripts)}")
+          Path("/tmp/dashboard.js").write_text(scripts[0], encoding="utf-8")
+          ids = set(re.findall(r'\\bid="([^"]+)"', html))
+          refs = set(re.findall(r"\\$\\('([^']+)'\\)", scripts[0]))
+          missing = sorted(refs - ids)
+          if missing:
+              raise SystemExit(f"JavaScript references missing element IDs: {missing}")
+          print(f"Found {len(ids)} HTML IDs and validated {len(refs)} JavaScript selectors.")
+          PY
+          node --check /tmp/dashboard.js
