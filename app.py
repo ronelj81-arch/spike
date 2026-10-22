@@ -627,6 +627,8 @@ def live_market_movers():
     try:
         data = yf.download(symbols, period="1d", interval="5m", progress=False,
                            auto_adjust=False, group_by="ticker", threads=True)
+        daily = yf.download(symbols, period="5d", interval="1d", progress=False,
+                             auto_adjust=False, group_by="ticker", threads=True)
         movers = []
         for symbol in symbols:
             try:
@@ -640,14 +642,10 @@ def live_market_movers():
                 previous = float(close.iloc[-2]) if len(close) > 1 else latest
                 if not np.isfinite(latest) or latest <= 0:
                     continue
-                # Prefer previous regular-session close for day change when available.
                 day_change = None
                 try:
-                    daily = yf.download(symbol, period="5d", interval="1d", progress=False,
-                                        auto_adjust=False, threads=False)
-                    if isinstance(daily.columns, pd.MultiIndex):
-                        daily.columns = daily.columns.get_level_values(0)
-                    dc = daily["Close"].dropna() if "Close" in daily.columns else pd.Series(dtype=float)
+                    daily_frame = daily[symbol] if isinstance(daily.columns, pd.MultiIndex) else daily
+                    dc = daily_frame["Close"].dropna() if "Close" in daily_frame.columns else pd.Series(dtype=float)
                     if len(dc) >= 2:
                         day_change = (latest / float(dc.iloc[-2]) - 1) * 100
                 except Exception:
