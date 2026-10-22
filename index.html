@@ -216,185 +216,21 @@ async function predict(){
 }
 async function runVolumeScanner(){
  const button=$('volumeScanBtn');button.disabled=true;button.textContent='Scanning volume…';
- showStatus('volumeScanStatus','Checking the latest available intraday volume across the watchlist…');
- $('volumeScanOutput').classList.add('hidden');
+ showStatus('volumeScanStatus','Checking latest available intraday volume across the watchlist…');$('volumeScanOutput').classList.add('hidden');
  try{
-  const res=await fetch('/api/volume-scanner');const data=await res.json();
-  if(!res.ok)throw new Error(data.detail||'Volume scan failed.');
+  const res=await fetch('/api/volume-scanner');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Volume scan failed.');
   const tbody=$('volumeScanRows');tbody.replaceChildren();
   data.results.forEach((item,index)=>{
    const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-   const values=[String(index+1),item.symbol,'
- const button=$('pennyScanBtn');button.disabled=true;button.textContent='Scanning…';
- showStatus('pennyScanStatus','Checking recent data, current prices, and bullish/bearish technical signals…');
- $('pennyScanOutput').classList.add('hidden');
- try{
-  const maxPrice=$('pennyMaxPrice').value;
-  const res=await fetch('/api/penny-scanner?max_price='+encodeURIComponent(maxPrice));
-  const data=await res.json();if(!res.ok)throw new Error(data.detail||'Penny-stock scan failed.');
-  const fill=(tbodyId,emptyId,items,scoreKey)=>{
-   const tbody=$(tbodyId);tbody.replaceChildren();
-   items.forEach(item=>{
-    const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-    const vals=[item.symbol,String(item[scoreKey])+'/100','
- const button=$('scanBtn');button.disabled=true;button.textContent='Scanning market…';showStatus('scanStatus','Scoring the curated market universe and ranking the strongest available setups…');$('scanOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/scanner');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Market scanner failed.');
-  const rows=$('scanRows');rows.replaceChildren();
-  data.results.forEach((item,index)=>{
-   const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-   const vals=[String(index+1),item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
-   vals.forEach((v,col)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(col===2){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(col===3)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\\n');rows.appendChild(tr);
+   const values=[String(index+1),item.symbol,'$'+Number(item.last_price).toFixed(2),Number(item.session_volume).toLocaleString(),Number(item.latest_minute_volume).toLocaleString(),Number(item.relative_volume).toFixed(2)+'x',(item.change_1m_pct>0?'+':'')+Number(item.change_1m_pct).toFixed(3)+'%'];
+   values.forEach((value,col)=>{const td=document.createElement('td');td.textContent=value;td.style.padding='11px 10px';if(col===3)td.style.fontWeight='800';if(col===6)td.style.color=item.change_1m_pct>0?'var(--green)':item.change_1m_pct<0?'var(--red)':'var(--muted)';tr.appendChild(td);});
+   tr.title='Latest bar: '+item.data_time;tbody.appendChild(tr);
   });
-  $('scanSummary').textContent='Showing '+data.results.length+' highest-scoring tickers from '+data.universe_scored+' successfully scored of '+data.universe_requested+' candidates · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
-  $('scanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' ticker(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All candidates returned data.';
-  $('scanOutput').classList.remove('hidden');showStatus('scanStatus','Market scan complete. The list is ranked by technical score, not buy certainty.');
- }catch(e){showStatus('scanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Refresh top 20 ↗';}
-}
-async function loadIndicators(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('indStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('indicatorsBtn');button.disabled=true;button.textContent='Calculating…';showStatus('indStatus','Loading recent bars and calculating indicators…');$('indOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/indicators?symbol='+encodeURIComponent(symbol));const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load indicators.');
-  const i=data.indicators;$('indRsi').textContent=fmtValue(i.rsi_14.value);$('indRsiNote').textContent=i.rsi_14.interpretation;$('indMacd').textContent=fmtValue(i.macd.value)+' / '+fmtValue(i.macd.signal);$('indMacdNote').textContent=i.macd.interpretation;
-  $('indSma20').textContent=fmtValue(i.sma_20.value);$('indSma20Note').textContent=i.sma_20.position;$('indSma50').textContent=fmtValue(i.sma_50.value);$('indSma50Note').textContent=i.sma_50.position;
-  $('indEma9').textContent=fmtValue(i.ema_9.value);$('indBollUp').textContent=fmtValue(i.bollinger_upper.value);$('indBollMid').textContent=fmtValue(i.bollinger_middle.value);$('indBollLow').textContent=fmtValue(i.bollinger_lower.value);
-  $('indVolume').textContent=i.volume_vs_20_bar_avg_pct===null?'Unavailable':(i.volume_vs_20_bar_avg_pct>0?'+':'')+i.volume_vs_20_bar_avg_pct.toFixed(1)+'%';
-  $('indOutput').classList.remove('hidden');$('indDetails').textContent='Ticker '+data.symbol+' · Last price $'+fmtValue(data.last_price)+' · Latest bar '+String(data.data_time).replace('T',' ').slice(0,19)+'. '+data.method+' '+data.notice;
-  showStatus('indStatus','Indicators loaded for '+data.symbol+'. Check timestamp and data freshness.');
- }catch(e){showStatus('indStatus',e.message+' The provider may restrict minute history; try again later.',true);}
- finally{button.disabled=false;button.textContent='Load stock indicators';}
-}
-async function loadChart(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('chartStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('chartBtn');button.disabled=true;button.textContent='Loading chart…';showStatus('chartStatus','Loading recent price bars and technical markers…');$('chartOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/chart?symbol='+encodeURIComponent(symbol)+'&limit=120');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load chart.');
-  drawPriceChart(data);$('chartOutput').classList.remove('hidden');
-  const buys=data.bars.filter(b=>b.signal==='BUY WATCH').length;const sells=data.bars.filter(b=>b.signal==='SELL / EXIT WATCH').length;
-  $('chartSummary').textContent=data.symbol+' · '+data.bars.length+' one-minute bars · '+buys+' BUY WATCH marker(s) · '+sells+' SELL / EXIT WATCH marker(s) · Updated '+new Date(data.generated_at).toLocaleString()+'.';
-  $('chartNotice').textContent=data.method+' '+data.notice;showStatus('chartStatus','Chart loaded. Markers show rule triggers, not guaranteed trade entries.');
- }catch(e){showStatus('chartStatus',e.message+' Try again during market hours.',true);}
- finally{button.disabled=false;button.textContent='Load buy / sell chart';}
-}
-function drawPriceChart(data){
- const canvas=$('priceChart'),parent=canvas.parentElement,ratio=window.devicePixelRatio||1,w=Math.max(320,parent.clientWidth),h=Math.max(250,parent.clientHeight);
- canvas.width=w*ratio;canvas.height=h*ratio;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);
- const bars=data.bars.filter(b=>Number.isFinite(b.price));if(!bars.length)return;
- const values=bars.flatMap(b=>[b.price,b.ema9,b.ema20].filter(Number.isFinite));let min=Math.min(...values),max=Math.max(...values);const pad=(max-min)*.12||.01;min-=pad;max+=pad;
- const left=58,right=w-16,top=18,bottom=h-38,plotW=right-left,plotH=bottom-top;
- const x=i=>left+(i/(bars.length-1||1))*plotW,y=v=>bottom-((v-min)/(max-min))*plotH;
- ctx.font='11px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#25334a';ctx.fillStyle='#9aa9c0';
- for(let i=0;i<=4;i++){const yy=top+plotH*i/4;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText((max-(max-min)*i/4).toFixed(2),4,yy+4);}
- function line(key,color,width){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;let begun=false;bars.forEach((b,i)=>{const v=b[key];if(!Number.isFinite(v))return;if(!begun){ctx.moveTo(x(i),y(v));begun=true;}else ctx.lineTo(x(i),y(v));});ctx.stroke();}
- line('price','#e8efff',2);line('ema9','#41e0a0',1.5);line('ema20','#8da9ff',1.5);
- bars.forEach((b,i)=>{if(!b.signal)return;const buy=b.signal==='BUY WATCH',xx=x(i),yy=y(b.price);ctx.beginPath();ctx.fillStyle=buy?'#41e0a0':'#ff6b83';ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();ctx.font='bold 10px system-ui';ctx.fillStyle=buy?'#41e0a0':'#ff6b83';const label=buy?'BUY':'SELL';ctx.fillText(label,Math.max(left,Math.min(right-28,xx-12)),Math.max(top+10,yy+(buy?-12:18)) );});
- ctx.fillStyle='#9aa9c0';ctx.font='10px system-ui';ctx.fillText(String(bars[0].time).slice(11,16),left,bottom+23);ctx.fillText(String(bars[Math.floor(bars.length/2)].time).slice(11,16),left+plotW/2-12,bottom+23);ctx.fillText(String(bars[bars.length-1].time).slice(11,16),right-32,bottom+23);
-}
-async function runBacktest(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('btStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('backtest');button.disabled=true;button.textContent='Testing historical data…';showStatus('btStatus','Downloading minute bars and running chronological tests…');$('btOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/backtest?symbol='+encodeURIComponent(symbol)+'&max_predictions=80');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Backtest failed.');
-  for(const item of data.results){const p='bt'+item.horizon_minutes;$(p+'acc').textContent=item.directional_accuracy_pct.toFixed(1)+'%';$(p+'base').textContent=item.always_up_baseline_pct.toFixed(1)+'%';$(p+'signal').textContent=item.signal_accuracy_pct===null?'No calls':item.signal_accuracy_pct.toFixed(1)+'%';$(p+'coverage').textContent=item.signal_coverage_pct.toFixed(1)+'%';$(p+'calls').textContent=item.up_calls+' / '+item.down_calls;}
-  $('btOutput').classList.remove('hidden');$('btDetails').textContent='Ticker '+data.symbol+' · '+data.data_bars.toLocaleString()+' minute bars · '+data.results.map(r=>r.horizon_minutes+'m: '+r.predictions_tested+' predictions').join(' · ')+'. '+data.notice;
-  showStatus('btStatus','Backtest completed for '+data.symbol+'.');
- }catch(e){showStatus('btStatus',e.message+' Try again later or another ticker.',true);}
- finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
-}
-$('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
-window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
-runScanner();
-</script></body></html>
-+Number(item.last_price).toFixed(3),(item.change_5bar_pct>0?'+':'')+item.change_5bar_pct.toFixed(2)+'%',item.rsi_14.toFixed(1)];
-    vals.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;td.style.padding='10px 9px';if(index===1){td.style.fontWeight='800';td.style.color=scoreKey==='bullish_score'?'var(--green)':'var(--red)';}tr.appendChild(td);});
-    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join(' | ');
-    tr.style.cursor='help';tbody.appendChild(tr);
-   });
-   $(emptyId).textContent=items.length?'Hover a row to see the technical checks.':'No matching signals in the current scan. Try a higher price limit or scan again during market hours.';
-  };
-  fill('pennyBullRows','pennyBullEmpty',data.bullish,'bullish_score');
-  fill('pennyBearRows','pennyBearEmpty',data.bearish,'bearish_score');
-  $('pennyScanSummary').textContent='Price limit 
- const button=$('scanBtn');button.disabled=true;button.textContent='Scanning market…';showStatus('scanStatus','Scoring the curated market universe and ranking the strongest available setups…');$('scanOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/scanner');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Market scanner failed.');
-  const rows=$('scanRows');rows.replaceChildren();
-  data.results.forEach((item,index)=>{
-   const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-   const vals=[String(index+1),item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
-   vals.forEach((v,col)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(col===2){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(col===3)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\\n');rows.appendChild(tr);
-  });
-  $('scanSummary').textContent='Showing '+data.results.length+' highest-scoring tickers from '+data.universe_scored+' successfully scored of '+data.universe_requested+' candidates · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
-  $('scanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' ticker(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All candidates returned data.';
-  $('scanOutput').classList.remove('hidden');showStatus('scanStatus','Market scan complete. The list is ranked by technical score, not buy certainty.');
- }catch(e){showStatus('scanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Refresh top 20 ↗';}
-}
-async function loadIndicators(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('indStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('indicatorsBtn');button.disabled=true;button.textContent='Calculating…';showStatus('indStatus','Loading recent bars and calculating indicators…');$('indOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/indicators?symbol='+encodeURIComponent(symbol));const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load indicators.');
-  const i=data.indicators;$('indRsi').textContent=fmtValue(i.rsi_14.value);$('indRsiNote').textContent=i.rsi_14.interpretation;$('indMacd').textContent=fmtValue(i.macd.value)+' / '+fmtValue(i.macd.signal);$('indMacdNote').textContent=i.macd.interpretation;
-  $('indSma20').textContent=fmtValue(i.sma_20.value);$('indSma20Note').textContent=i.sma_20.position;$('indSma50').textContent=fmtValue(i.sma_50.value);$('indSma50Note').textContent=i.sma_50.position;
-  $('indEma9').textContent=fmtValue(i.ema_9.value);$('indBollUp').textContent=fmtValue(i.bollinger_upper.value);$('indBollMid').textContent=fmtValue(i.bollinger_middle.value);$('indBollLow').textContent=fmtValue(i.bollinger_lower.value);
-  $('indVolume').textContent=i.volume_vs_20_bar_avg_pct===null?'Unavailable':(i.volume_vs_20_bar_avg_pct>0?'+':'')+i.volume_vs_20_bar_avg_pct.toFixed(1)+'%';
-  $('indOutput').classList.remove('hidden');$('indDetails').textContent='Ticker '+data.symbol+' · Last price $'+fmtValue(data.last_price)+' · Latest bar '+String(data.data_time).replace('T',' ').slice(0,19)+'. '+data.method+' '+data.notice;
-  showStatus('indStatus','Indicators loaded for '+data.symbol+'. Check timestamp and data freshness.');
- }catch(e){showStatus('indStatus',e.message+' The provider may restrict minute history; try again later.',true);}
- finally{button.disabled=false;button.textContent='Load stock indicators';}
-}
-async function loadChart(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('chartStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('chartBtn');button.disabled=true;button.textContent='Loading chart…';showStatus('chartStatus','Loading recent price bars and technical markers…');$('chartOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/chart?symbol='+encodeURIComponent(symbol)+'&limit=120');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load chart.');
-  drawPriceChart(data);$('chartOutput').classList.remove('hidden');
-  const buys=data.bars.filter(b=>b.signal==='BUY WATCH').length;const sells=data.bars.filter(b=>b.signal==='SELL / EXIT WATCH').length;
-  $('chartSummary').textContent=data.symbol+' · '+data.bars.length+' one-minute bars · '+buys+' BUY WATCH marker(s) · '+sells+' SELL / EXIT WATCH marker(s) · Updated '+new Date(data.generated_at).toLocaleString()+'.';
-  $('chartNotice').textContent=data.method+' '+data.notice;showStatus('chartStatus','Chart loaded. Markers show rule triggers, not guaranteed trade entries.');
- }catch(e){showStatus('chartStatus',e.message+' Try again during market hours.',true);}
- finally{button.disabled=false;button.textContent='Load buy / sell chart';}
-}
-function drawPriceChart(data){
- const canvas=$('priceChart'),parent=canvas.parentElement,ratio=window.devicePixelRatio||1,w=Math.max(320,parent.clientWidth),h=Math.max(250,parent.clientHeight);
- canvas.width=w*ratio;canvas.height=h*ratio;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);
- const bars=data.bars.filter(b=>Number.isFinite(b.price));if(!bars.length)return;
- const values=bars.flatMap(b=>[b.price,b.ema9,b.ema20].filter(Number.isFinite));let min=Math.min(...values),max=Math.max(...values);const pad=(max-min)*.12||.01;min-=pad;max+=pad;
- const left=58,right=w-16,top=18,bottom=h-38,plotW=right-left,plotH=bottom-top;
- const x=i=>left+(i/(bars.length-1||1))*plotW,y=v=>bottom-((v-min)/(max-min))*plotH;
- ctx.font='11px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#25334a';ctx.fillStyle='#9aa9c0';
- for(let i=0;i<=4;i++){const yy=top+plotH*i/4;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText((max-(max-min)*i/4).toFixed(2),4,yy+4);}
- function line(key,color,width){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;let begun=false;bars.forEach((b,i)=>{const v=b[key];if(!Number.isFinite(v))return;if(!begun){ctx.moveTo(x(i),y(v));begun=true;}else ctx.lineTo(x(i),y(v));});ctx.stroke();}
- line('price','#e8efff',2);line('ema9','#41e0a0',1.5);line('ema20','#8da9ff',1.5);
- bars.forEach((b,i)=>{if(!b.signal)return;const buy=b.signal==='BUY WATCH',xx=x(i),yy=y(b.price);ctx.beginPath();ctx.fillStyle=buy?'#41e0a0':'#ff6b83';ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();ctx.font='bold 10px system-ui';ctx.fillStyle=buy?'#41e0a0':'#ff6b83';const label=buy?'BUY':'SELL';ctx.fillText(label,Math.max(left,Math.min(right-28,xx-12)),Math.max(top+10,yy+(buy?-12:18)) );});
- ctx.fillStyle='#9aa9c0';ctx.font='10px system-ui';ctx.fillText(String(bars[0].time).slice(11,16),left,bottom+23);ctx.fillText(String(bars[Math.floor(bars.length/2)].time).slice(11,16),left+plotW/2-12,bottom+23);ctx.fillText(String(bars[bars.length-1].time).slice(11,16),right-32,bottom+23);
-}
-async function runBacktest(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('btStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('backtest');button.disabled=true;button.textContent='Testing historical data…';showStatus('btStatus','Downloading minute bars and running chronological tests…');$('btOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/backtest?symbol='+encodeURIComponent(symbol)+'&max_predictions=80');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Backtest failed.');
-  for(const item of data.results){const p='bt'+item.horizon_minutes;$(p+'acc').textContent=item.directional_accuracy_pct.toFixed(1)+'%';$(p+'base').textContent=item.always_up_baseline_pct.toFixed(1)+'%';$(p+'signal').textContent=item.signal_accuracy_pct===null?'No calls':item.signal_accuracy_pct.toFixed(1)+'%';$(p+'coverage').textContent=item.signal_coverage_pct.toFixed(1)+'%';$(p+'calls').textContent=item.up_calls+' / '+item.down_calls;}
-  $('btOutput').classList.remove('hidden');$('btDetails').textContent='Ticker '+data.symbol+' · '+data.data_bars.toLocaleString()+' minute bars · '+data.results.map(r=>r.horizon_minutes+'m: '+r.predictions_tested+' predictions').join(' · ')+'. '+data.notice;
-  showStatus('btStatus','Backtest completed for '+data.symbol+'.');
- }catch(e){showStatus('btStatus',e.message+' Try again later or another ticker.',true);}
- finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
-}
-$('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
-window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
-runScanner();
-</script></body></html>
-+Number(data.max_price).toFixed(2)+' · '+data.penny_stocks_found+' symbols matched price filter · '+data.bullish.length+' bullish · '+data.bearish.length+' bearish · '+data.mixed_count+' mixed · Updated '+new Date(data.generated_at).toLocaleString()+'.';
-  $('pennyScanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' symbols: '+data.errors.map(e=>e.symbol).join(', ')+'.':'No data errors reported for the watchlist.';
-  $('pennyScanOutput').classList.remove('hidden');
-  showStatus('pennyScanStatus','Scan complete. Signals reflect the latest available bars and may be delayed.');
- }catch(e){showStatus('pennyScanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Scan penny stocks ↗';}
+  $('volumeScanSummary').textContent='Showing '+data.returned_count+' stocks ranked by session volume from '+data.universe_scored+' symbols with data. Updated '+new Date(data.generated_at).toLocaleString()+'.';
+  $('volumeScanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' symbol(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All scanned symbols returned data.';
+  $('volumeScanOutput').classList.remove('hidden');showStatus('volumeScanStatus','Volume scan complete. Check each row’s latest-bar timestamp.');
+ }catch(e){showStatus('volumeScanStatus',e.message,true);}
+ finally{button.disabled=false;button.textContent='Scan highest-volume stocks ↗';}
 }
 async function runScanner(){
  const button=$('scanBtn');button.disabled=true;button.textContent='Scanning market…';showStatus('scanStatus','Scoring the curated market universe and ranking the strongest available setups…');$('scanOutput').classList.add('hidden');
@@ -481,83 +317,25 @@ runScanner();
 }
 async function runPennyScanner(){
  const button=$('pennyScanBtn');button.disabled=true;button.textContent='Scanning…';
- showStatus('pennyScanStatus','Checking recent data, current prices, and bullish/bearish technical signals…');
- $('pennyScanOutput').classList.add('hidden');
+ showStatus('pennyScanStatus','Checking recent data, current prices, and bullish/bearish technical signals…');$('pennyScanOutput').classList.add('hidden');
  try{
-  const maxPrice=$('pennyMaxPrice').value;
-  const res=await fetch('/api/penny-scanner?max_price='+encodeURIComponent(maxPrice));
-  const data=await res.json();if(!res.ok)throw new Error(data.detail||'Penny-stock scan failed.');
+  const maxPrice=$('pennyMaxPrice').value;const res=await fetch('/api/penny-scanner?max_price='+encodeURIComponent(maxPrice));const data=await res.json();if(!res.ok)throw new Error(data.detail||'Penny-stock scan failed.');
   const fill=(tbodyId,emptyId,items,scoreKey)=>{
    const tbody=$(tbodyId);tbody.replaceChildren();
    items.forEach(item=>{
     const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-    const vals=[item.symbol,String(item[scoreKey])+'/100','
- const button=$('scanBtn');button.disabled=true;button.textContent='Scanning market…';showStatus('scanStatus','Scoring the curated market universe and ranking the strongest available setups…');$('scanOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/scanner');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Market scanner failed.');
-  const rows=$('scanRows');rows.replaceChildren();
-  data.results.forEach((item,index)=>{
-   const tr=document.createElement('tr');tr.style.borderBottom='1px solid var(--line)';
-   const vals=[String(index+1),item.symbol,item.bullish_score+'/100',item.classification,'$'+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
-   vals.forEach((v,col)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(col===2){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(col===3)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
-   tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\\n');rows.appendChild(tr);
-  });
-  $('scanSummary').textContent='Showing '+data.results.length+' highest-scoring tickers from '+data.universe_scored+' successfully scored of '+data.universe_requested+' candidates · Updated '+new Date(data.generated_at).toLocaleString()+'. Hover a row for the checks.';
-  $('scanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' ticker(s): '+data.errors.map(e=>e.symbol).join(', ')+'.':'All candidates returned data.';
-  $('scanOutput').classList.remove('hidden');showStatus('scanStatus','Market scan complete. The list is ranked by technical score, not buy certainty.');
- }catch(e){showStatus('scanStatus',e.message,true);}
- finally{button.disabled=false;button.textContent='Refresh top 20 ↗';}
-}
-async function loadIndicators(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('indStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('indicatorsBtn');button.disabled=true;button.textContent='Calculating…';showStatus('indStatus','Loading recent bars and calculating indicators…');$('indOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/indicators?symbol='+encodeURIComponent(symbol));const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load indicators.');
-  const i=data.indicators;$('indRsi').textContent=fmtValue(i.rsi_14.value);$('indRsiNote').textContent=i.rsi_14.interpretation;$('indMacd').textContent=fmtValue(i.macd.value)+' / '+fmtValue(i.macd.signal);$('indMacdNote').textContent=i.macd.interpretation;
-  $('indSma20').textContent=fmtValue(i.sma_20.value);$('indSma20Note').textContent=i.sma_20.position;$('indSma50').textContent=fmtValue(i.sma_50.value);$('indSma50Note').textContent=i.sma_50.position;
-  $('indEma9').textContent=fmtValue(i.ema_9.value);$('indBollUp').textContent=fmtValue(i.bollinger_upper.value);$('indBollMid').textContent=fmtValue(i.bollinger_middle.value);$('indBollLow').textContent=fmtValue(i.bollinger_lower.value);
-  $('indVolume').textContent=i.volume_vs_20_bar_avg_pct===null?'Unavailable':(i.volume_vs_20_bar_avg_pct>0?'+':'')+i.volume_vs_20_bar_avg_pct.toFixed(1)+'%';
-  $('indOutput').classList.remove('hidden');$('indDetails').textContent='Ticker '+data.symbol+' · Last price $'+fmtValue(data.last_price)+' · Latest bar '+String(data.data_time).replace('T',' ').slice(0,19)+'. '+data.method+' '+data.notice;
-  showStatus('indStatus','Indicators loaded for '+data.symbol+'. Check timestamp and data freshness.');
- }catch(e){showStatus('indStatus',e.message+' The provider may restrict minute history; try again later.',true);}
- finally{button.disabled=false;button.textContent='Load stock indicators';}
-}
-async function loadChart(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('chartStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('chartBtn');button.disabled=true;button.textContent='Loading chart…';showStatus('chartStatus','Loading recent price bars and technical markers…');$('chartOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/chart?symbol='+encodeURIComponent(symbol)+'&limit=120');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load chart.');
-  drawPriceChart(data);$('chartOutput').classList.remove('hidden');
-  const buys=data.bars.filter(b=>b.signal==='BUY WATCH').length;const sells=data.bars.filter(b=>b.signal==='SELL / EXIT WATCH').length;
-  $('chartSummary').textContent=data.symbol+' · '+data.bars.length+' one-minute bars · '+buys+' BUY WATCH marker(s) · '+sells+' SELL / EXIT WATCH marker(s) · Updated '+new Date(data.generated_at).toLocaleString()+'.';
-  $('chartNotice').textContent=data.method+' '+data.notice;showStatus('chartStatus','Chart loaded. Markers show rule triggers, not guaranteed trade entries.');
- }catch(e){showStatus('chartStatus',e.message+' Try again during market hours.',true);}
- finally{button.disabled=false;button.textContent='Load buy / sell chart';}
-}
-function drawPriceChart(data){
- const canvas=$('priceChart'),parent=canvas.parentElement,ratio=window.devicePixelRatio||1,w=Math.max(320,parent.clientWidth),h=Math.max(250,parent.clientHeight);
- canvas.width=w*ratio;canvas.height=h*ratio;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);
- const bars=data.bars.filter(b=>Number.isFinite(b.price));if(!bars.length)return;
- const values=bars.flatMap(b=>[b.price,b.ema9,b.ema20].filter(Number.isFinite));let min=Math.min(...values),max=Math.max(...values);const pad=(max-min)*.12||.01;min-=pad;max+=pad;
- const left=58,right=w-16,top=18,bottom=h-38,plotW=right-left,plotH=bottom-top;
- const x=i=>left+(i/(bars.length-1||1))*plotW,y=v=>bottom-((v-min)/(max-min))*plotH;
- ctx.font='11px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#25334a';ctx.fillStyle='#9aa9c0';
- for(let i=0;i<=4;i++){const yy=top+plotH*i/4;ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText((max-(max-min)*i/4).toFixed(2),4,yy+4);}
- function line(key,color,width){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=width;let begun=false;bars.forEach((b,i)=>{const v=b[key];if(!Number.isFinite(v))return;if(!begun){ctx.moveTo(x(i),y(v));begun=true;}else ctx.lineTo(x(i),y(v));});ctx.stroke();}
- line('price','#e8efff',2);line('ema9','#41e0a0',1.5);line('ema20','#8da9ff',1.5);
- bars.forEach((b,i)=>{if(!b.signal)return;const buy=b.signal==='BUY WATCH',xx=x(i),yy=y(b.price);ctx.beginPath();ctx.fillStyle=buy?'#41e0a0':'#ff6b83';ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();ctx.font='bold 10px system-ui';ctx.fillStyle=buy?'#41e0a0':'#ff6b83';const label=buy?'BUY':'SELL';ctx.fillText(label,Math.max(left,Math.min(right-28,xx-12)),Math.max(top+10,yy+(buy?-12:18)) );});
- ctx.fillStyle='#9aa9c0';ctx.font='10px system-ui';ctx.fillText(String(bars[0].time).slice(11,16),left,bottom+23);ctx.fillText(String(bars[Math.floor(bars.length/2)].time).slice(11,16),left+plotW/2-12,bottom+23);ctx.fillText(String(bars[bars.length-1].time).slice(11,16),right-32,bottom+23);
-}
-async function runBacktest(){
- const symbol=$('symbol').value.trim().toUpperCase();if(!validSymbol(symbol)){showStatus('btStatus','Enter a valid ticker symbol first.',true);return;}
- const button=$('backtest');button.disabled=true;button.textContent='Testing historical data…';showStatus('btStatus','Downloading minute bars and running chronological tests…');$('btOutput').classList.add('hidden');
- try{
-  const res=await fetch('/api/backtest?symbol='+encodeURIComponent(symbol)+'&max_predictions=80');const data=await res.json();if(!res.ok)throw new Error(data.detail||'Backtest failed.');
-  for(const item of data.results){const p='bt'+item.horizon_minutes;$(p+'acc').textContent=item.directional_accuracy_pct.toFixed(1)+'%';$(p+'base').textContent=item.always_up_baseline_pct.toFixed(1)+'%';$(p+'signal').textContent=item.signal_accuracy_pct===null?'No calls':item.signal_accuracy_pct.toFixed(1)+'%';$(p+'coverage').textContent=item.signal_coverage_pct.toFixed(1)+'%';$(p+'calls').textContent=item.up_calls+' / '+item.down_calls;}
-  $('btOutput').classList.remove('hidden');$('btDetails').textContent='Ticker '+data.symbol+' · '+data.data_bars.toLocaleString()+' minute bars · '+data.results.map(r=>r.horizon_minutes+'m: '+r.predictions_tested+' predictions').join(' · ')+'. '+data.notice;
-  showStatus('btStatus','Backtest completed for '+data.symbol+'.');
- }catch(e){showStatus('btStatus',e.message+' Try again later or another ticker.',true);}
- finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
+    const values=[item.symbol,String(item[scoreKey])+'/100','$'+Number(item.last_price).toFixed(3),(item.change_5bar_pct>0?'+':'')+Number(item.change_5bar_pct).toFixed(2)+'%',Number(item.rsi_14).toFixed(1)];
+    values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;td.style.padding='10px 9px';if(index===1){td.style.fontWeight='800';td.style.color=scoreKey==='bullish_score'?'var(--green)':'var(--red)';}tr.appendChild(td);});
+    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join(' | ');tr.style.cursor='help';tbody.appendChild(tr);
+   });
+   $(emptyId).textContent=items.length?'Hover a row to see technical checks.':'No matching signals in the current scan.';
+  };
+  fill('pennyBullRows','pennyBullEmpty',data.bullish,'bullish_score');fill('pennyBearRows','pennyBearEmpty',data.bearish,'bearish_score');
+  $('pennyScanSummary').textContent='Price limit $'+Number(data.max_price).toFixed(2)+'; '+data.penny_stocks_found+' stocks matched; '+data.bullish.length+' bullish; '+data.bearish.length+' bearish; '+data.mixed_count+' mixed. Updated '+new Date(data.generated_at).toLocaleString()+'.';
+  $('pennyScanErrors').textContent=data.errors.length?'Data unavailable for '+data.errors.length+' symbols: '+data.errors.map(e=>e.symbol).join(', ')+'.':'No data errors reported for the watchlist.';
+  $('pennyScanOutput').classList.remove('hidden');showStatus('pennyScanStatus','Scan complete. Signals use the latest available bars and may be delayed.');
+ }catch(e){showStatus('pennyScanStatus',e.message,true);}
+ finally{button.disabled=false;button.textContent='Scan penny stocks ↗';}
 }
 $('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
 window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
