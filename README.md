@@ -36,3 +36,17 @@ This is an experimental educational prototype, **not a dependable trading system
 `GET /api/predict?symbol=SPY&horizon=5` (horizon must be 5 or 10 minutes)
 
 `GET /api/health`
+
+
+## Historical backtesting
+
+The dashboard includes a **Run 5 & 10 min backtest** button. The API endpoint is:
+
+`GET /api/backtest?symbol=SPY&max_predictions=80`
+
+- Runs separate 5-minute and 10-minute walk-forward tests using recent one-minute bars.
+- Uses an expanding training window and keeps training labels at least one forecast horizon behind each test prediction to reduce look-ahead leakage.
+- Reports directional accuracy, an always-UP baseline, accuracy of non-neutral signals, signal coverage, and UP/DOWN call counts.
+- `max_predictions` can be set from 20 to 200.
+
+**Accuracy reports are generated only when the endpoint runs successfully against available market data.** No accuracy figures are hardcoded or fabricated in this repository. The provider may limit historical one-minute data. Treat results as exploratory: this basic test does not model spread, fees, slippage, or prove profitability, and its estimates may be unstable across market regimes.
