@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 220" role="img" aria-labelledby="title desc">
+<title id="title">Spike — Market Signals</title><desc id="desc">A blue and mint market chart symbol with opposing arrows, beside the Spike wordmark.</desc>
+<defs><linearGradient id="blue" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#0868ff"/><stop offset="1" stop-color="#19d4ee"/></linearGradient><linearGradient id="mint" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#18c9c9"/><stop offset="1" stop-color="#44f4a9"/></linearGradient></defs>
+<g transform="translate(18 20)">
+<path d="M24 98 C24 55 57 26 97 26 H135 L162 43 L194 12" fill="none" stroke="url(#mint)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M174 12 H194 V32" fill="none" stroke="url(#mint)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M194 98 C194 141 161 170 121 170 H83 L56 153 L24 184" fill="none" stroke="url(#blue)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M44 184 H24 V164" fill="none" stroke="url(#blue)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<g stroke-linecap="round" stroke-width="6"><path d="M74 73 V128" stroke="#29edb1"/><rect x="65" y="87" width="18" height="26" rx="3" fill="#29edb1"/><path d="M110 58 V143" stroke="#29edb1"/><rect x="101" y="74" width="18" height="36" rx="3" fill="#29edb1"/><path d="M146 72 V126" stroke="#1aa7ff"/><rect x="137" y="84" width="18" height="27" rx="3" fill="#1aa7ff"/></g>
+</g>
+<g transform="translate(260 70)"><text x="0" y="70" font-family="Inter,Arial,sans-serif" font-size="76" font-weight="900" letter-spacing="3" fill="#f5f8ff">SPIKE</text><path d="M247 15 H288 L277 29 H236 Z" fill="#42f2ae" transform="translate(180 5)"/><path d="M247 15 H288 L277 29 H236 Z" fill="#12cce4" transform="translate(180 30)"/><path d="M247 15 H288 L277 29 H236 Z" fill="#1468ff" transform="translate(180 55)"/><text x="4" y="113" font-family="Inter,Arial,sans-serif" font-size="21" font-weight="700" letter-spacing="7" fill="#a8b7d3">MARKET SIGNALS</text></g>
+</svg>
