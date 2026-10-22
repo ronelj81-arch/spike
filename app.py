@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -321,24 +322,48 @@ def get_indicators(symbol: str = Query("SPY", min_length=1, max_length=12)):
 
 
 
+MARKET_SCAN_UNIVERSE = [
+    "NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "AVGO", "TSLA", "AMD", "NFLX",
+    "COST", "LLY", "JPM", "WMT", "ORCL", "CRM", "PLTR", "MU", "QCOM", "INTC",
+    "UBER", "COIN", "HOOD", "SHOP", "PANW", "ADBE", "NOW", "AMAT", "GE", "CAT",
+    "XOM", "BAC", "GS", "V", "MA", "DIS", "TMO", "ABBV", "SPY", "QQQ"
+]
+
+
 @app.get("/api/scanner")
-def bullish_scanner(symbols: str = Query("SPY,QQQ,AAPL,MSFT,NVDA,AMD,META,TSLA,AMZN", max_length=300)):
+def bullish_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_length=500)):
     requested = list(dict.fromkeys(s.strip().upper() for s in symbols.split(",") if s.strip()))
-    if not requested or len(requested) > 12 or any(not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested):
-        raise HTTPException(status_code=400, detail="Provide 1–12 valid comma-separated ticker symbols.")
-    results, errors = [], []
-    for symbol in requested:
+    if not requested or len(requested) > 40 or any(not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested):
+        raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
+
+    def score_symbol(symbol):
         try:
             bars = download_minutes(symbol)
-            results.append(bullish_snapshot(bars, symbol))
+            return symbol, bullish_snapshot(bars, symbol), None
         except Exception as exc:
-            errors.append({"symbol": symbol, "error": str(exc) or "Data unavailable"})
+            return symbol, None, str(exc) or "Data unavailable"
+
+    results, errors = [], []
+    # Bounded concurrency keeps a 40-symbol scan practical without flooding the data provider.
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(score_symbol, symbol) for symbol in requested]
+        for future in as_completed(futures):
+            symbol, result, error = future.result()
+            if result is not None:
+                results.append(result)
+            else:
+                errors.append({"symbol": symbol, "error": error})
     results.sort(key=lambda item: (item["bullish_score"], item["change_1m_pct"]), reverse=True)
+    top_results = results[:20]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "method": "Rule-based technical score from six trend, momentum, and volume checks; not a probability or expected return.",
-        "results": results, "errors": errors,
-        "notice": "A score of 100 means all six configured bullish checks passed on the latest available one-minute bar. It does not mean a 100% chance of rising. Short-term indicators can fail and data may be delayed."
+        "universe_requested": len(requested),
+        "universe_scored": len(results),
+        "returned_count": len(top_results),
+        "results": top_results,
+        "errors": errors,
+        "method": "Top 20 ranked by a rule-based technical score across a curated universe of liquid large-cap stocks and broad-market ETFs. The score is not a probability or expected return.",
+        "notice": "This is a ranked shortlist from a curated universe, not every stock in the market or a personalized buy recommendation. A score of 100 means all six configured bullish checks passed on the latest available one-minute bar; it does not mean a 100% chance of rising. If fewer than 20 symbols return data, fewer than 20 can be shown. Short-term indicators can fail and data may be delayed."
     }
 
 
