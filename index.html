@@ -1027,4 +1027,6 @@ async function runPennyScanner(){
 $('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
 window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
 runScanner();
+
+window.addEventListener('DOMContentLoaded',()=>{loadMarketMovers();window.setInterval(loadMarketMovers,60000);});
 </script></body></html>
