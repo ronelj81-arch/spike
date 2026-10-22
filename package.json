@@ -1,0 +1,18 @@
+{
+  "name": "spike-market-signals-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor mobile wrapper for Spike Market Signals",
+  "scripts": {
+    "mobile:android": "cap sync android",
+    "mobile:ios": "cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/ios": "^7.4.3"
+  }
+}
