@@ -34,7 +34,7 @@ jobs:
         env:
           BACKTEST_SYMBOL: ${{ github.event.inputs.symbol || 'SPY' }}
           BACKTEST_MAX_PREDICTIONS: ${{ github.event.inputs.max_predictions || '80' }}
-      - run: python scripts/run_backtest.py
+        run: python scripts/run_backtest.py
       - name: Save report artifact
         if: always() && hashFiles('backtest-report.json') != ''
         uses: actions/upload-artifact@v4
