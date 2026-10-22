@@ -619,6 +619,43 @@ def chart_data(symbol: str = Query("SPY", min_length=1, max_length=12),
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc) or "Chart data could not be loaded.") from exc
 
+@app.get("/api/history")
+def stock_price_history(symbol: str = Query("AAPL", min_length=1, max_length=12),
+                        period: str = Query("5y", pattern="^(1mo|6mo|1y|5y)$")):
+    """Daily adjusted stock prices for a selectable historical window up to five years."""
+    symbol = symbol.strip().upper()
+    try:
+        data = yf.download(symbol, period=period, interval="1d", progress=False,
+                           auto_adjust=True, threads=False)
+        if data is None or data.empty:
+            raise ValueError("No daily price history returned. Check the ticker and try again.")
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        if "Close" not in data.columns:
+            raise ValueError("The provider did not return daily closing prices.")
+        close = data["Close"].dropna()
+        if close.empty:
+            raise ValueError("No closing prices are available for this period.")
+        rows = [{"date": ts.strftime("%Y-%m-%d"), "price": round(float(price), 4)}
+                for ts, price in close.items() if np.isfinite(float(price))]
+        first, latest = rows[0]["price"], rows[-1]["price"]
+        return {
+            "symbol": symbol, "period": period, "currency": "USD",
+            "current_price": latest, "start_price": first,
+            "change_amount": round(latest - first, 4),
+            "change_pct": round((latest / first - 1) * 100, 2) if first else None,
+            "data_points": len(rows), "history": rows,
+            "first_date": rows[0]["date"], "latest_date": rows[-1]["date"],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "method": "Daily adjusted close history from Yahoo Finance via yfinance.",
+            "notice": "Prices may be delayed or unavailable. Past performance does not predict future returns; historical price changes exclude fees and may not reflect total return from dividends."
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc) or "Historical prices could not be loaded.") from exc
+
+
 @app.get("/api/backtest")
 def backtest(symbol: str = Query("SPY", min_length=1, max_length=12),
              max_predictions: int = Query(80, ge=20, le=200)):
