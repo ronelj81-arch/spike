@@ -434,6 +434,66 @@ def penny_snapshot(bars, symbol, max_price):
     }
 
 
+
+
+@app.get("/api/volume-scanner")
+def volume_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_length=500)):
+    requested = list(dict.fromkeys(s.strip().upper() for s in symbols.split(",") if s.strip()))
+    if not requested or len(requested) > 40 or any(
+        not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested
+    ):
+        raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
+
+    def volume_symbol(symbol):
+        try:
+            bars = download_minutes(symbol)
+            volume = bars["volume"].astype(float)
+            close = bars["close"].astype(float)
+            latest_time = close.index[-1]
+            # Use bars from the date of the latest available bar to estimate today's
+            # regular/intraday volume; the provider may return delayed or partial data.
+            session_bars = bars.loc[bars.index.date == latest_time.date()]
+            if session_bars.empty:
+                raise ValueError("No bars available for the latest session.")
+            session_volume = int(session_bars["volume"].sum())
+            latest_minute_volume = int(volume.iloc[-1])
+            avg_minute_volume = float(volume.tail(20).mean())
+            relative_volume = latest_minute_volume / avg_minute_volume if avg_minute_volume > 0 else 0.0
+            return symbol, {
+                "symbol": symbol,
+                "last_price": round(float(close.iloc[-1]), 4),
+                "session_volume": session_volume,
+                "latest_minute_volume": latest_minute_volume,
+                "avg_20m_volume": round(avg_minute_volume, 1),
+                "relative_volume": round(relative_volume, 2),
+                "change_1m_pct": round((float(close.iloc[-1]) / float(close.iloc[-2]) - 1) * 100, 3) if len(close) > 1 and close.iloc[-2] else 0.0,
+                "data_time": latest_time.isoformat(),
+            }, None
+        except Exception as exc:
+            return symbol, None, str(exc) or "Data unavailable"
+
+    results, errors = [], []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(volume_symbol, symbol) for symbol in requested]
+        for future in as_completed(futures):
+            symbol, result, error = future.result()
+            if result is not None:
+                results.append(result)
+            elif error:
+                errors.append({"symbol": symbol, "error": error})
+    results.sort(key=lambda item: (item["session_volume"], item["latest_minute_volume"]), reverse=True)
+    top_results = results[:20]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "universe_requested": len(requested),
+        "universe_scored": len(results),
+        "returned_count": len(top_results),
+        "results": top_results,
+        "errors": errors,
+        "method": "Ranked by total reported volume for the latest available trading session, using intraday one-minute bars from a curated 40-symbol liquid-stock/ETF universe.",
+        "notice": "Session volume can be partial or delayed outside market hours and may differ from official consolidated volume. This is not every listed stock. The latest-minute and relative-volume columns describe recent activity, not a price prediction."
+    }
+
 @app.get("/api/penny-scanner")
 def penny_scanner(max_price: float = Query(5.0, gt=0, le=5.0),
                   symbols: str = Query(",".join(PENNY_SCAN_UNIVERSE), max_length=600)):
