@@ -54,6 +54,55 @@ def download_minutes(symbol):
 
 
 
+def download_minutes_batch(symbols):
+    """Fetch a scanner's symbols in one provider request instead of one request per ticker."""
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        return {}, { }
+
+    raw = yf.download(
+        tickers=symbols, period="7d", interval="1m", progress=False,
+        auto_adjust=True, threads=True, group_by="ticker"
+    )
+    if raw is None or raw.empty:
+        raise ValueError("Market-data provider returned no intraday data for this scan.")
+
+    batches, errors = {}, {}
+    multi = isinstance(raw.columns, pd.MultiIndex)
+    for symbol in symbols:
+        try:
+            if multi:
+                level0 = raw.columns.get_level_values(0)
+                level1 = raw.columns.get_level_values(1)
+                if symbol in level0:
+                    data = raw[symbol].copy()
+                elif symbol in level1:
+                    data = raw.xs(symbol, axis=1, level=1).copy()
+                else:
+                    raise ValueError("No data returned for this ticker.")
+            else:
+                if len(symbols) != 1:
+                    raise ValueError("Provider returned an unexpected column format.")
+                data = raw.copy()
+
+            data.columns = [str(col[0] if isinstance(col, tuple) else col) for col in data.columns]
+            if "Close" not in data.columns or "Volume" not in data.columns:
+                raise ValueError("Price or volume data unavailable.")
+            aligned = pd.concat([
+                data["Close"].rename("close"),
+                data["Volume"].rename("volume")
+            ], axis=1).dropna(subset=["close"])
+            aligned["volume"] = aligned["volume"].fillna(0)
+            aligned = aligned[~aligned.index.duplicated(keep="last")].sort_index()
+            if len(aligned) < 60:
+                raise ValueError("Not enough recent one-minute bars.")
+            aligned.attrs["symbol"] = symbol
+            batches[symbol] = aligned
+        except Exception as exc:
+            errors[symbol] = str(exc) or "Data unavailable"
+    return batches, errors
+
+
 def indicator_snapshot(bars):
     close = bars["close"].astype(float)
     volume = bars["volume"].astype(float)
@@ -336,23 +385,17 @@ def bullish_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_len
     if not requested or len(requested) > 40 or any(not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested):
         raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
 
-    def score_symbol(symbol):
-        try:
-            bars = download_minutes(symbol)
-            return symbol, bullish_snapshot(bars, symbol), None
-        except Exception as exc:
-            return symbol, None, str(exc) or "Data unavailable"
-
     results, errors = [], []
-    # Bounded concurrency keeps a 40-symbol scan practical without flooding the data provider.
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(score_symbol, symbol) for symbol in requested]
-        for future in as_completed(futures):
-            symbol, result, error = future.result()
-            if result is not None:
-                results.append(result)
-            else:
-                errors.append({"symbol": symbol, "error": error})
+    try:
+        bars_by_symbol, fetch_errors = download_minutes_batch(requested)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Bulk market scan failed: " + (str(exc) or "data unavailable")) from exc
+    errors.extend({"symbol": symbol, "error": error} for symbol, error in fetch_errors.items())
+    for symbol, bars in bars_by_symbol.items():
+        try:
+            results.append(bullish_snapshot(bars, symbol))
+        except Exception as exc:
+            errors.append({"symbol": symbol, "error": str(exc) or "Could not score ticker"})
     results.sort(key=lambda item: (item["bullish_score"], item["change_1m_pct"]), reverse=True)
     top_results = results[:20]
     return {
@@ -444,14 +487,17 @@ def volume_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_leng
     ):
         raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
 
-    def volume_symbol(symbol):
+    results, errors = [], []
+    try:
+        bars_by_symbol, fetch_errors = download_minutes_batch(requested)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Bulk volume scan failed: " + (str(exc) or "data unavailable")) from exc
+    errors.extend({"symbol": symbol, "error": error} for symbol, error in fetch_errors.items())
+    for symbol, bars in bars_by_symbol.items():
         try:
-            bars = download_minutes(symbol)
             volume = bars["volume"].astype(float)
             close = bars["close"].astype(float)
             latest_time = close.index[-1]
-            # Use bars from the date of the latest available bar to estimate today's
-            # regular/intraday volume; the provider may return delayed or partial data.
             session_bars = bars.loc[bars.index.date == latest_time.date()]
             if session_bars.empty:
                 raise ValueError("No bars available for the latest session.")
@@ -459,7 +505,7 @@ def volume_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_leng
             latest_minute_volume = int(volume.iloc[-1])
             avg_minute_volume = float(volume.tail(20).mean())
             relative_volume = latest_minute_volume / avg_minute_volume if avg_minute_volume > 0 else 0.0
-            return symbol, {
+            results.append({
                 "symbol": symbol,
                 "last_price": round(float(close.iloc[-1]), 4),
                 "session_volume": session_volume,
@@ -468,19 +514,9 @@ def volume_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_leng
                 "relative_volume": round(relative_volume, 2),
                 "change_1m_pct": round((float(close.iloc[-1]) / float(close.iloc[-2]) - 1) * 100, 3) if len(close) > 1 and close.iloc[-2] else 0.0,
                 "data_time": latest_time.isoformat(),
-            }, None
+            })
         except Exception as exc:
-            return symbol, None, str(exc) or "Data unavailable"
-
-    results, errors = [], []
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(volume_symbol, symbol) for symbol in requested]
-        for future in as_completed(futures):
-            symbol, result, error = future.result()
-            if result is not None:
-                results.append(result)
-            elif error:
-                errors.append({"symbol": symbol, "error": error})
+            errors.append({"symbol": symbol, "error": str(exc) or "Data unavailable"})
     results.sort(key=lambda item: (item["session_volume"], item["latest_minute_volume"]), reverse=True)
     top_results = results[:20]
     return {
@@ -503,22 +539,19 @@ def penny_scanner(max_price: float = Query(5.0, gt=0, le=5.0),
     ):
         raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
 
-    def score_symbol(symbol):
-        try:
-            bars = download_minutes(symbol)
-            return symbol, penny_snapshot(bars, symbol, max_price), None
-        except Exception as exc:
-            return symbol, None, str(exc) or "Data unavailable"
-
     scored, errors = [], []
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(score_symbol, symbol) for symbol in requested]
-        for future in as_completed(futures):
-            symbol, result, error = future.result()
+    try:
+        bars_by_symbol, fetch_errors = download_minutes_batch(requested)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Bulk penny scan failed: " + (str(exc) or "data unavailable")) from exc
+    errors.extend({"symbol": symbol, "error": error} for symbol, error in fetch_errors.items())
+    for symbol, bars in bars_by_symbol.items():
+        try:
+            result = penny_snapshot(bars, symbol, max_price)
             if result is not None:
                 scored.append(result)
-            elif error:
-                errors.append({"symbol": symbol, "error": error})
+        except Exception as exc:
+            errors.append({"symbol": symbol, "error": str(exc) or "Data unavailable"})
     bullish = sorted(
         [item for item in scored if item["signal"] == "BULLISH"],
         key=lambda item: (item["bullish_score"], item["change_5bar_pct"]), reverse=True
