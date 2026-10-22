@@ -1,0 +1,44 @@
+{
+  "symbol": "SPY",
+  "data_source": "Yahoo Finance via yfinance",
+  "data_bars": 2730,
+  "data_start": "2026-10-13T13:30:00+00:00",
+  "data_end": "2026-10-21T19:59:00+00:00",
+  "generated_at": "2026-10-22T01:14:53.968807+00:00",
+  "results": [
+    {
+      "horizon_minutes": 5,
+      "predictions_tested": 36,
+      "directional_accuracy_pct": 52.8,
+      "always_up_baseline_pct": 41.7,
+      "signal_coverage_pct": 13.9,
+      "signal_accuracy_pct": 60.0,
+      "up_calls": 3,
+      "up_call_accuracy_pct": 66.7,
+      "down_calls": 2,
+      "down_call_accuracy_pct": 50.0,
+      "first_test_time": "2026-10-16 19:05:00+00:00",
+      "last_test_time": "2026-10-21 19:40:00+00:00"
+    },
+    {
+      "horizon_minutes": 10,
+      "predictions_tested": 35,
+      "directional_accuracy_pct": 45.7,
+      "always_up_baseline_pct": 65.7,
+      "signal_coverage_pct": 5.7,
+      "signal_accuracy_pct": 50.0,
+      "up_calls": 0,
+      "up_call_accuracy_pct": null,
+      "down_calls": 2,
+      "down_call_accuracy_pct": 50.0,
+      "first_test_time": "2026-10-16 19:01:00+00:00",
+      "last_test_time": "2026-10-21 19:17:00+00:00"
+    }
+  ],
+  "limitations": [
+    "Only 36 five-minute and 35 ten-minute predictions were tested; these are very small samples.",
+    "Intraday one-minute history covers only a short recent window.",
+    "Prediction horizons can overlap, observations are not independent, and transaction costs, spread, and slippage are not modeled.",
+    "Historical accuracy does not guarantee future performance or profitability."
+  ]
+}
