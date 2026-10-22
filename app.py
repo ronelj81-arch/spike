@@ -367,6 +367,118 @@ def bullish_scanner(symbols: str = Query(",".join(MARKET_SCAN_UNIVERSE), max_len
     }
 
 
+
+# Candidate universe is intentionally broad; live prices are checked before any
+# ticker is shown so delisted, unavailable, or no-longer-penny names are excluded.
+PENNY_SCAN_UNIVERSE = [
+    "SNDL", "TLRY", "PLUG", "CHPT", "OPEN", "DNA", "BARK", "FUBO", "GPRO", "EVGO",
+    "NIO", "LCID", "GRAB", "BITF", "HUT", "WULF", "CIFR", "BTG", "SIRI", "KULR",
+    "CRKN", "TTOO", "AITX", "BNGO", "MULN", "NKLA", "CYBN", "BBAI", "RGTI", "LPSN",
+    "JOBY", "QS", "PL", "MVIS", "LAES", "OPTT", "HIMS", "MNTS", "VLCN", "VRAX"
+]
+
+
+def penny_snapshot(bars, symbol, max_price):
+    close = bars["close"].astype(float)
+    volume = bars["volume"].astype(float)
+    if len(close) < 60:
+        raise ValueError("Not enough recent bars to score this ticker.")
+    last = float(close.iloc[-1])
+    if not np.isfinite(last) or last <= 0 or last > max_price:
+        return None
+    prev = float(close.iloc[-2])
+    sma20_series = close.rolling(20).mean()
+    sma50_series = close.rolling(50).mean()
+    sma20, sma50 = float(sma20_series.iloc[-1]), float(sma50_series.iloc[-1])
+    ema9 = close.ewm(span=9, adjust=False).mean()
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9, adjust=False).mean()
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi_series = (100 - 100 / (1 + rs)).where(loss != 0, 100).where(~((gain == 0) & (loss == 0)), 50)
+    rsi = float(rsi_series.iloc[-1]) if pd.notna(rsi_series.iloc[-1]) else 50.0
+    avg_volume = float(volume.rolling(20).mean().iloc[-1])
+    vol_ratio = float(volume.iloc[-1] / avg_volume) if avg_volume > 0 else 0.0
+    momentum5 = float(close.iloc[-1] / close.iloc[-6] - 1) if len(close) >= 6 and close.iloc[-6] else 0.0
+    macd_up = float(macd.iloc[-1]) > float(macd_signal.iloc[-1])
+    checks = [
+        ("Price vs SMA 20", last > sma20, 20, f"Price {'above' if last > sma20 else 'below'} SMA 20"),
+        ("Price vs SMA 50", last > sma50, 15, f"Price {'above' if last > sma50 else 'below'} SMA 50"),
+        ("EMA 9 vs SMA 20", float(ema9.iloc[-1]) > sma20, 15, f"EMA 9 {'above' if float(ema9.iloc[-1]) > sma20 else 'below'} SMA 20"),
+        ("MACD momentum", macd_up, 20, "MACD above signal" if macd_up else "MACD below signal"),
+        ("RSI momentum", 50 <= rsi < 70, 15, f"RSI is {rsi:.1f}"),
+        ("5-bar momentum and volume", momentum5 > 0 and vol_ratio >= 1.2, 15,
+         f"5-bar change {momentum5 * 100:+.2f}%; volume {vol_ratio:.2f}× 20-bar average"),
+    ]
+    bullish_score = sum(weight for _, passed, weight, _ in checks if passed)
+    bearish_score = sum(weight for _, passed, weight, _ in checks if not passed)
+    if bullish_score >= 70 and bullish_score - bearish_score >= 25:
+        signal = "BULLISH"
+    elif bearish_score >= 70 and bearish_score - bullish_score >= 25:
+        signal = "BEARISH"
+    else:
+        signal = "MIXED"
+    return {
+        "symbol": symbol, "last_price": round(last, 4),
+        "change_1m_pct": round((last / prev - 1) * 100, 3) if prev else 0.0,
+        "change_5bar_pct": round(momentum5 * 100, 2),
+        "bullish_score": bullish_score, "bearish_score": bearish_score,
+        "signal": signal, "rsi_14": round(rsi, 1),
+        "volume_ratio": round(vol_ratio, 2), "data_time": close.index[-1].isoformat(),
+        "checks": [{"name": name, "bullish": bool(passed), "weight": weight, "detail": detail}
+                   for name, passed, weight, detail in checks]
+    }
+
+
+@app.get("/api/penny-scanner")
+def penny_scanner(max_price: float = Query(5.0, gt=0, le=5.0),
+                  symbols: str = Query(",".join(PENNY_SCAN_UNIVERSE), max_length=600)):
+    requested = list(dict.fromkeys(s.strip().upper() for s in symbols.split(",") if s.strip()))
+    if not requested or len(requested) > 40 or any(
+        not all(c.isalnum() or c in ".^=-" for c in s) or len(s) > 12 for s in requested
+    ):
+        raise HTTPException(status_code=400, detail="Provide 1–40 valid comma-separated ticker symbols.")
+
+    def score_symbol(symbol):
+        try:
+            bars = download_minutes(symbol)
+            return symbol, penny_snapshot(bars, symbol, max_price), None
+        except Exception as exc:
+            return symbol, None, str(exc) or "Data unavailable"
+
+    scored, errors = [], []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(score_symbol, symbol) for symbol in requested]
+        for future in as_completed(futures):
+            symbol, result, error = future.result()
+            if result is not None:
+                scored.append(result)
+            elif error:
+                errors.append({"symbol": symbol, "error": error})
+    bullish = sorted(
+        [item for item in scored if item["signal"] == "BULLISH"],
+        key=lambda item: (item["bullish_score"], item["change_5bar_pct"]), reverse=True
+    )[:15]
+    bearish = sorted(
+        [item for item in scored if item["signal"] == "BEARISH"],
+        key=lambda item: (item["bearish_score"], -item["change_5bar_pct"]), reverse=True
+    )[:15]
+    mixed = [item for item in scored if item["signal"] == "MIXED"]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "max_price": max_price, "universe_requested": len(requested),
+        "universe_scored": len(scored), "penny_stocks_found": len(scored),
+        "bullish": bullish, "bearish": bearish, "mixed_count": len(mixed),
+        "errors": errors,
+        "method": "Live one-minute trend, moving-average, MACD, RSI, short momentum, and relative-volume checks. Bullish and bearish scores are rule-based technical scores, not probabilities.",
+        "notice": "Only symbols with a latest available price at or below the selected limit are included. This is a limited curated universe, not every listed penny stock. Thin liquidity, wide spreads, halts, stale data, and rapid reversals can make signals unreliable. No score guarantees direction or profit."
+    }
+
+
 @app.get("/api/chart")
 def chart_data(symbol: str = Query("SPY", min_length=1, max_length=12),
                limit: int = Query(120, ge=40, le=300)):
