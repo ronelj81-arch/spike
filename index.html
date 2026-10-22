@@ -34,6 +34,28 @@
 <div class="foot" id="method"></div>
 </div></section>
 <section class="panel bt-panel">
+  <div class="eyebrow">Technical analysis</div>
+  <h2 class="bt-title">Stock indicators</h2>
+  <p class="sub" style="margin-bottom:14px">Check momentum, trend, volatility bands, and relative volume for the selected ticker using recent one-minute bars.</p>
+  <div class="bt-actions"><button id="indicatorsBtn">Load stock indicators</button><span class="hint">Uses the ticker above · indicators update when requested</span></div>
+  <div id="indStatus" class="status" role="status">No indicator data loaded yet.</div>
+  <div id="indOutput" class="hidden">
+    <div class="meta">
+      <div class="metric"><small>RSI (14)</small><strong id="indRsi">—</strong><small id="indRsiNote"></small></div>
+      <div class="metric"><small>MACD / Signal</small><strong id="indMacd">—</strong><small id="indMacdNote"></small></div>
+      <div class="metric"><small>SMA (20)</small><strong id="indSma20">—</strong><small id="indSma20Note"></small></div>
+      <div class="metric"><small>SMA (50)</small><strong id="indSma50">—</strong><small id="indSma50Note"></small></div>
+      <div class="metric"><small>EMA (9)</small><strong id="indEma9">—</strong></div>
+      <div class="metric"><small>Bollinger upper</small><strong id="indBollUp">—</strong></div>
+      <div class="metric"><small>Bollinger middle</small><strong id="indBollMid">—</strong></div>
+      <div class="metric"><small>Bollinger lower</small><strong id="indBollLow">—</strong></div>
+      <div class="metric"><small>Volume vs 20-bar average</small><strong id="indVolume">—</strong></div>
+    </div>
+    <div class="bt-note" id="indDetails"></div>
+    <div class="bt-note"><strong>Quick guide:</strong> RSI above 70 is often called overbought and below 30 oversold; MACD above its signal line indicates stronger recent momentum; moving averages help summarize trend; Bollinger Bands describe recent volatility. None predicts price reliably on its own.</div>
+  </div>
+</section>
+<section class="panel bt-panel">
   <div class="eyebrow">Historical validation</div>
   <h2 class="bt-title">Backtest your strategy</h2>
   <p class="sub" style="margin-bottom:14px">Run an expanding-window walk-forward test on recent one-minute bars. Each prediction is trained only on past data available at that point.</p>
@@ -71,6 +93,53 @@ async function predict(){
   $('status').textContent='Forecast generated for '+data.symbol+'. Always check timestamp and data freshness.';
  }catch(e){$('status').textContent=e.message+' Check the ticker and try again during market hours.';$('status').className='status error';}
  finally{button.disabled=false;button.textContent='Generate signal ↗';}
+}
+
+async function loadIndicators(){
+ const symbol=$('symbol').value.trim().toUpperCase();
+ if(!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)){ $('indStatus').textContent='Enter a valid ticker symbol first.';$('indStatus').className='status error';return; }
+ const button=$('indicatorsBtn');button.disabled=true;button.textContent='Calculating…';$('indStatus').textContent='Loading recent bars and calculating technical indicators…';$('indStatus').className='status';$('indOutput').classList.add('hidden');
+ try{
+  const res=await fetch('/api/indicators?symbol='+encodeURIComponent(symbol));
+  const data=await res.json();if(!res.ok)throw new Error(data.detail||'Unable to load indicators.');
+  const i=data.indicators;
+  const fmt=v=>v===null||v===undefined?'Unavailable':Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4});
+  $('indRsi').textContent=fmt(i.rsi_14.value);$('indRsiNote').textContent=i.rsi_14.interpretation;
+  $('indMacd').textContent=fmt(i.macd.value)+' / '+fmt(i.macd.signal);$('indMacdNote').textContent=i.macd.interpretation;
+  $('indSma20').textContent=fmt(i.sma_20.value);$('indSma20Note').textContent=i.sma_20.position;
+  $('indSma50').textContent=fmt(i.sma_50.value);$('indSma50Note').textContent=i.sma_50.position;
+  $('indEma9').textContent=fmt(i.ema_9.value);
+  $('indBollUp').textContent=fmt(i.bollinger_upper.value);$('indBollMid').textContent=fmt(i.bollinger_middle.value);$('indBollLow').textContent=fmt(i.bollinger_lower.value);
+  $('indVolume').textContent=i.volume_vs_20_bar_avg_pct===null?'Unavailable':(i.volume_vs_20_bar_avg_pct>0?'+':'')+i.volume_vs_20_bar_avg_pct.toFixed(1)+'%';
+  $('indOutput').classList.remove('hidden');
+  $('indDetails').textContent='Ticker '+data.symbol+' · Last price 
+ const symbol=$('symbol').value.trim().toUpperCase();
+ if(!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)){ $('btStatus').textContent='Enter a valid ticker symbol first.';$('btStatus').className='status error';return; }
+ const button=$('backtest');button.disabled=true;button.textContent='Testing historical data…';$('btStatus').textContent='Downloading minute bars and running chronological tests for both horizons…';$('btStatus').className='status';$('btOutput').classList.add('hidden');
+ try{
+  const res=await fetch('/api/backtest?symbol='+encodeURIComponent(symbol)+'&max_predictions=80');
+  const data=await res.json();if(!res.ok)throw new Error(data.detail||'Backtest failed.');
+  for(const item of data.results){
+   const n=item.horizon_minutes, p='bt'+n;
+   $(p+'acc').textContent=item.directional_accuracy_pct.toFixed(1)+'%';
+   $(p+'base').textContent=item.always_up_baseline_pct.toFixed(1)+'%';
+   $(p+'signal').textContent=item.signal_accuracy_pct===null?'No calls':item.signal_accuracy_pct.toFixed(1)+'%';
+   $(p+'coverage').textContent=item.signal_coverage_pct.toFixed(1)+'%';
+   $(p+'calls').textContent=item.up_calls+' / '+item.down_calls;
+  }
+  $('btOutput').classList.remove('hidden');
+  $('btDetails').textContent='Ticker '+data.symbol+' · '+data.data_bars.toLocaleString()+' minute bars downloaded · '+data.results.map(r=>r.horizon_minutes+'m: '+r.predictions_tested+' predictions').join(' · ')+'. Test window: '+data.results[0].first_test_time+' through '+data.results[0].last_test_time+'. '+data.notice;
+  $('btStatus').textContent='Backtest completed for '+data.symbol+'. Results are displayed below.';
+ }catch(e){$('btStatus').textContent=e.message+' The provider may restrict minute history; try again later or another ticker.';$('btStatus').className='status error';}
+ finally{button.disabled=false;button.textContent='Run 5 & 10 min backtest';}
+}
+$('indicatorsBtn').addEventListener('click',loadIndicators);
+$('backtest').addEventListener('click',runBacktest);
+$('run').addEventListener('click',predict);$('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
+</script></body></html>+fmt(data.last_price)+' · Latest bar '+String(data.data_time).replace('T',' ').slice(0,19)+'. '+data.method+' '+data.notice;
+  $('indStatus').textContent='Indicators loaded for '+data.symbol+'. Check the timestamp and data freshness.';
+ }catch(e){$('indStatus').textContent=e.message+' The provider may restrict minute history; try another ticker or try again later.';$('indStatus').className='status error';}
+ finally{button.disabled=false;button.textContent='Load stock indicators';}
 }
 
 async function runBacktest(){
