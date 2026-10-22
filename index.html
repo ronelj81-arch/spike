@@ -240,7 +240,7 @@ $('backtest').addEventListener('click',runBacktest);
 $('run').addEventListener('click',predict);
 $('symbol').addEventListener('keydown',e=>{if(e.key==='Enter')predict()});
 window.addEventListener('resize',()=>{if(!$('chartOutput').classList.contains('hidden'))loadChart();});
-</script></body></html>+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
+</body></html>+Number(item.last_price).toFixed(2),(item.change_1m_pct>0?'+':'')+item.change_1m_pct.toFixed(3)+'%',item.rsi_14.toFixed(1),item.volume_ratio.toFixed(2)+'×'];
    vals.forEach((v,index)=>{const td=document.createElement('td');td.textContent=v;td.style.padding='13px 12px';if(index===1){td.style.fontWeight='800';td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';}if(index===2)td.style.color=item.bullish_score>=80?'var(--green)':item.bullish_score>=60?'var(--blue)':'var(--muted)';tr.appendChild(td);});
    tr.title=item.checks.map(c=>(c.bullish?'✓ ':'○ ')+c.name+': '+c.detail).join('\n');rows.appendChild(tr);
   }
